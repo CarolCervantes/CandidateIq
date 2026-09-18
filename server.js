@@ -19,7 +19,6 @@ async function sendWithBrevo({ to, candidateName, subject, text, html }) {
   const apiKey = process.env.BREVO_API_KEY;
   if (!apiKey) return null;
 
-  // El correo remitente debe ser preferiblemente el correo registrado en Brevo o EMAIL_FROM_ADDRESS
   const senderEmail = process.env.EMAIL_FROM_ADDRESS || 'carol.cervantesacosta@unicolombo.edu.co';
   const senderName = process.env.EMAIL_FROM_NAME || 'CandidateIQ Selección';
 
@@ -108,7 +107,7 @@ function getTwilioClient() {
 }
 
 // -------------------------------------------------------------
-// ENDPOINT API: ENVIAR EMAIL
+// ENDPOINT API: ENVIAR EMAIL INDIVIDUAL
 // -------------------------------------------------------------
 app.post('/api/send-email', async (req, res) => {
   try {
@@ -120,7 +119,7 @@ app.post('/api/send-email', async (req, res) => {
 
     let finalMessage = message;
     if (!finalMessage.trim().startsWith('Estimado(a) Candidato(a)')) {
-      finalMessage = `Estimado(a) Candidato(a) ${candidateName || ''},\n\n${finalMessage}`;
+      finalMessage = `Estimado(a) Candidato(a),\n\n${finalMessage}`;
     }
 
     const emailSubject = subject || `Invitación a Entrevista - CandidateIQ Proceso de Selección`;
@@ -139,12 +138,12 @@ app.post('/api/send-email', async (req, res) => {
 
     if (process.env.BREVO_API_KEY) {
       const result = await sendWithBrevo({ to, candidateName, subject: emailSubject, text: finalMessage, html: htmlBody });
-      return res.json({ ok: true, message: 'Correo procesado por Brevo API.', messageId: result.messageId });
+      return res.json({ ok: true, message: 'Correo enviado vía Brevo API.', messageId: result.messageId });
     }
 
     if (process.env.RESEND_API_KEY) {
       const result = await sendWithResend({ to, subject: emailSubject, text: finalMessage, html: htmlBody });
-      return res.json({ ok: true, message: 'Correo procesado por Resend API.', id: result.id });
+      return res.json({ ok: true, message: 'Correo enviado vía Resend API.', id: result.id });
     }
 
     const transporter = getEmailTransporter();
@@ -174,7 +173,7 @@ app.post('/api/send-email', async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// ENDPOINT API: ENVIAR WHATSAPP
+// ENDPOINT API: ENVIAR WHATSAPP INDIVIDUAL
 // -------------------------------------------------------------
 app.post('/api/send-whatsapp', async (req, res) => {
   try {
@@ -195,7 +194,7 @@ app.post('/api/send-whatsapp', async (req, res) => {
 
     let finalMessage = message;
     if (!finalMessage.trim().startsWith('Estimado(a) Candidato(a)')) {
-      finalMessage = `Estimado(a) Candidato(a) ${candidateName || ''},\n\n${finalMessage}`;
+      finalMessage = `Estimado(a) Candidato(a),\n\n${finalMessage}`;
     }
 
     const client = getTwilioClient();
@@ -208,17 +207,108 @@ app.post('/api/send-whatsapp', async (req, res) => {
         body: finalMessage
       });
 
-      return res.json({ ok: true, message: 'Mensaje de WhatsApp enviado exitosamente vía Twilio.', sid: response.sid });
+      return res.json({ ok: true, message: 'Mensaje de WhatsApp enviado vía Twilio API.', sid: response.sid });
     } else {
       console.log(`[SIMULACIÓN WHATSAPP CandidateIQ] Hacia: ${cleanPhone}`);
       return res.json({
         ok: true,
         simulated: true,
-        message: `[Simulación] Mensaje preparado para WhatsApp (${cleanPhone}). Configura TWILIO_ACCOUNT_SID en Render.`
+        message: `[Simulación] Mensaje preparado para WhatsApp (${cleanPhone}).`
       });
     }
   } catch (error) {
     console.error('Error enviando WhatsApp:', error);
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// -------------------------------------------------------------
+// ENDPOINT API: ENVIAR MASIVO (BATCH DISPATCH)
+// -------------------------------------------------------------
+app.post('/api/send-batch', async (req, res) => {
+  try {
+    const { candidates = [], channels = [], subject, message } = req.body;
+
+    if (!candidates.length || !channels.length || !message) {
+      return res.status(400).json({ ok: false, error: 'Faltan candidatos, canales o mensaje.' });
+    }
+
+    const results = [];
+
+    for (const candidate of candidates) {
+      const candidateResult = { name: candidate.name, email: candidate.email, phone: candidate.phone, dispatches: [] };
+
+      // Ensure body starts with Estimado(a) Candidato(a),
+      let finalMessage = message;
+      if (!finalMessage.trim().startsWith('Estimado(a) Candidato(a)')) {
+        finalMessage = `Estimado(a) Candidato(a),\n\n${finalMessage}`;
+      }
+
+      // Email Dispatch
+      if (channels.includes('email') && candidate.email) {
+        const emailSubject = subject || 'Invitación a Entrevista - CandidateIQ';
+        const htmlBody = `<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <div style="background-color: #0f172a; color: #ffffff; padding: 16px; border-radius: 6px 6px 0 0; text-align: center;">
+            <h2 style="margin: 0; font-size: 20px; font-weight: 600;">CandidateIQ</h2>
+            <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">Sistema Inteligente de Selección</p>
+          </div>
+          <div style="padding: 24px; background-color: #ffffff;">
+            ${finalMessage.split('\n\n').map(p => `<p style="margin-bottom: 14px;">${p.replace(/\n/g, '<br>')}</p>`).join('')}
+          </div>
+        </div>`;
+
+        try {
+          if (process.env.BREVO_API_KEY) {
+            const brevoRes = await sendWithBrevo({ to: candidate.email, candidateName: candidate.name, subject: emailSubject, text: finalMessage, html: htmlBody });
+            candidateResult.dispatches.push({ channel: 'email', ok: true, message: 'Correo enviado vía Brevo API.' });
+          } else if (process.env.RESEND_API_KEY) {
+            const resendRes = await sendWithResend({ to: candidate.email, subject: emailSubject, text: finalMessage, html: htmlBody });
+            candidateResult.dispatches.push({ channel: 'email', ok: true, message: 'Correo enviado vía Resend API.' });
+          } else {
+            const transporter = getEmailTransporter();
+            if (transporter) {
+              await transporter.sendMail({ from: process.env.EMAIL_FROM || 'CandidateIQ <no-reply@candidateiq.com>', to: candidate.email, subject: emailSubject, text: finalMessage, html: htmlBody });
+              candidateResult.dispatches.push({ channel: 'email', ok: true, message: 'Correo enviado vía SMTP.' });
+            } else {
+              candidateResult.dispatches.push({ channel: 'email', ok: true, simulated: true, message: '[Simulación] Correo preparado.' });
+            }
+          }
+        } catch (err) {
+          candidateResult.dispatches.push({ channel: 'email', ok: false, message: err.message });
+        }
+      }
+
+      // WhatsApp Dispatch
+      if (channels.includes('whatsapp') && candidate.phone) {
+        let cleanPhone = candidate.phone.replace(/[^\d+]/g, '');
+        if (!cleanPhone.startsWith('+')) {
+          if (cleanPhone.length === 10 && cleanPhone.startsWith('3')) cleanPhone = '+57' + cleanPhone;
+          else cleanPhone = '+' + cleanPhone;
+        }
+
+        const client = getTwilioClient();
+        if (client) {
+          try {
+            const response = await client.messages.create({
+              from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER || '+14155238886'}`,
+              to: `whatsapp:${cleanPhone}`,
+              body: finalMessage
+            });
+            candidateResult.dispatches.push({ channel: 'whatsapp', ok: true, message: 'WhatsApp enviado vía Twilio API.' });
+          } catch (err) {
+            candidateResult.dispatches.push({ channel: 'whatsapp', ok: false, message: err.message });
+          }
+        } else {
+          candidateResult.dispatches.push({ channel: 'whatsapp', ok: true, simulated: true, message: `[Simulación] WhatsApp preparado para ${cleanPhone}.` });
+        }
+      }
+
+      results.push(candidateResult);
+    }
+
+    return res.json({ ok: true, results });
+  } catch (error) {
+    console.error('Error en dispatch masivo:', error);
     return res.status(500).json({ ok: false, error: error.message });
   }
 });
@@ -278,7 +368,7 @@ app.post('/api/mcp', async (req, res) => {
       const { to, candidateName, subject, message } = args;
       let finalMessage = message || '';
       if (!finalMessage.trim().startsWith('Estimado(a) Candidato(a)')) {
-        finalMessage = `Estimado(a) Candidato(a) ${candidateName || ''},\n\n${finalMessage}`;
+        finalMessage = `Estimado(a) Candidato(a),\n\n${finalMessage}`;
       }
 
       if (process.env.BREVO_API_KEY) {
@@ -307,7 +397,7 @@ app.post('/api/mcp', async (req, res) => {
       const client = getTwilioClient();
       let finalMessage = message || '';
       if (!finalMessage.trim().startsWith('Estimado(a) Candidato(a)')) {
-        finalMessage = `Estimado(a) Candidato(a) ${candidateName || ''},\n\n${finalMessage}`;
+        finalMessage = `Estimado(a) Candidato(a),\n\n${finalMessage}`;
       }
 
       if (client) {

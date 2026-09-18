@@ -158,7 +158,6 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 .send-results { margin-top: 18px; display: grid; gap: 8px; }
 .send-item { padding: 12px; border: 1px solid var(--line); font-size: 12px; background: var(--card); color: var(--ink); display: flex; flex-direction: column; gap: 8px; }
 
-/* Theme Toggle Sun / Moon Icon in Bottom Right */
 .theme-toggle {
   position: fixed; bottom: 24px; right: 24px; width: 44px; height: 44px; border-radius: 50%;
   background: var(--card); border: 1px solid var(--line-strong); color: var(--ink);
@@ -186,7 +185,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
   <p>
     Carga varios currículums, define los criterios de la vacante y CandidateIQ calcula
     una puntuación, ordena los candidatos y permite preparar y enviar sus citaciones
-    por WhatsApp o correo.
+    masivas por WhatsApp o correo a todos los seleccionados al mismo tiempo.
   </p>
 
   <section class="section">
@@ -262,7 +261,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
   <div class="modal">
     <div class="modal-head">
       <div>
-        <div class="kicker">candidateiq / citación</div>
+        <div class="kicker">candidateiq / citación masiva</div>
         <h2>Programar entrevista</h2>
         <p id="selected-summary"></p>
       </div>
@@ -286,24 +285,27 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
     </div>
 
     <div class="field">
-      <label>Canal de envío</label>
+      <label>Canal de envío masivo</label>
       <div class="channel-grid">
         <label class="channel"><input type="checkbox" id="send-whatsapp" checked> WhatsApp</label>
         <label class="channel"><input type="checkbox" id="send-email" checked> Correo</label>
         <label class="channel"><input type="checkbox" id="send-both" checked> Ambos</label>
       </div>
-      <div class="field-note">Los datos de contacto se obtienen automáticamente del CV.</div>
+      <div class="field-note">Se enviará la citación de forma simultánea a todos los candidatos seleccionados.</div>
     </div>
 
     <div class="field">
       <label for="mensaje">Mensaje preescrito</label>
       <textarea id="mensaje"></textarea>
-      <div class="field-note">Puedes editar el texto antes de enviarlo. El cuerpo inicia obligatoriamente con Estimado(a) Candidato(a)...</div>
+      <div class="field-note">Puedes editar el texto antes de enviarlo. El cuerpo inicia únicamente con: Estimado(a) Candidato(a),</div>
     </div>
 
     <div class="actions">
       <button type="button" class="btn btn-secondary" id="preview-btn">Actualizar vista previa</button>
-      <button type="button" class="btn" id="enviar-btn">Listo — enviar citaciones</button>
+      <button type="button" class="btn" id="enviar-btn">Listo — enviar citaciones a todos</button>
+      <button type="button" class="btn btn-secondary" id="open-all-wa-btn" style="display:none;">
+        Abrir todos los chats de WhatsApp a la vez
+      </button>
     </div>
 
     <div class="preview" id="preview"></div>
@@ -311,7 +313,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
   </div>
 </div>
 
-<!-- BOTÓN MODO CLARO / OSCURO (SOL / LUNA MINIMALISTA) -->
+<!-- BOTÓN MODO CLARO / OSCURO -->
 <button class="theme-toggle" id="theme-toggle" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema">
   <svg id="sun-icon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="12" cy="12" r="5"></circle>
@@ -572,10 +574,10 @@ async function readFile(file) {
   return (await file.text()).trim();
 }
 
-/* ---------- ESTRUCTURA OBLIGATORIA DEL MENSAJE ---------- */
+/* ---------- ESTRUCTURA OBLIGATORIA DEL MENSAJE (SIN NOMBRE) ---------- */
 
-function defaultMessage(name='[NOMBRE]') {
-  return `Estimado(a) Candidato(a) ${name},
+function defaultMessage() {
+  return `Estimado(a) Candidato(a),
 
 Nos complace informarte que has sido seleccionado/a para continuar con el proceso de selección.
 
@@ -593,8 +595,6 @@ function personalizedMessage(candidate) {
   const lugarVal = $('lugar').value.trim() || '[LUGAR]';
 
   return $('mensaje').value
-    .replace(/^Estimado\(a\) Candidato\(a\).*/, `Estimado(a) Candidato(a) ${candidate.name},`)
-    .replaceAll('[NOMBRE]', candidate.name)
     .replaceAll('[DÍA]', fechaVal)
     .replaceAll('[HORA]', horaVal)
     .replaceAll('[LUGAR]', lugarVal);
@@ -623,8 +623,8 @@ function updatePreview() {
 
   const first = selected[0];
   $('preview').textContent =
-    `VISTA PREVIA — ${first.name}\n\n${personalizedMessage(first)}` +
-    (selected.length > 1 ? `\n\n+ ${selected.length - 1} candidato(s) recibirán su mensaje personalizado.` : '');
+    `VISTA PREVIA DE MENSAJE MASIVO (Inicia con Estimado(a) Candidato(a), sin nombre):\n\n${personalizedMessage(first)}` +
+    (selected.length > 1 ? `\n\n+ Se enviará automáticamente a los ${selected.length} candidatos seleccionados al mismo tiempo.` : '');
 }
 
 function getSelectedCandidates() {
@@ -680,7 +680,7 @@ $('citar-btn').addEventListener('click', () => {
   if (!selected.length) return;
 
   $('selected-summary').textContent =
-    `${selected.length} candidato(s): ${selected.map(c => c.name).join(', ')}`;
+    `${selected.length} candidato(s) seleccionados: ${selected.map(c => c.name).join(', ')}`;
 
   if (!$('mensaje').value.trim()) $('mensaje').value = defaultMessage();
   updatePreview();
@@ -695,16 +695,18 @@ $('modal').addEventListener('click', e => {
 $('preview-btn').addEventListener('click', updatePreview);
 ['fecha','hora','lugar'].forEach(id => $(id).addEventListener('input', updatePreview));
 
-/* ---------- ENVÍO DE CITACIONES (EMAIL API & ENLACE DIRECTO GRATUITO A WHATSAPP) ---------- */
+/* ---------- ENVÍO MASIVO DE CITACIONES (EMAIL & WHATSAPP) ---------- */
 
 function getCleanPhoneForWhatsApp(phone) {
   if (!phone) return '';
   let digits = phone.replace(/\D/g, '');
   if (digits.length === 10 && digits.startsWith('3')) {
-    return '57' + digits; // Código de país Colombia por defecto
+    return '57' + digits;
   }
   return digits;
 }
+
+let pendingWaLinks = [];
 
 $('enviar-btn').addEventListener('click', async () => {
   const selected = getSelectedCandidates();
@@ -733,77 +735,115 @@ $('enviar-btn').addEventListener('click', async () => {
   }
 
   $('enviar-btn').disabled = true;
-  $('send-results').innerHTML = '';
+  $('send-results').innerHTML = '<div class="send-item">Procesando envíos masivos a todos los candidatos seleccionados...</div>';
+  pendingWaLinks = [];
 
-  for (const candidate of selected) {
-    const message = personalizedMessage(candidate);
+  // Intento de Envío en Lote Masivo al Backend si está en la nube
+  let isBackendLive = false;
+  try {
+    const batchRes = await fetch('/api/send-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidates: selected.map(c => ({ name: c.name, email: c.email, phone: c.phone })),
+        channels: channels,
+        subject: 'Invitación a Entrevista - CandidateIQ',
+        message: personalizedMessage(selected[0])
+      })
+    });
 
-    for (const channel of channels) {
-      if (channel === 'whatsapp') {
-        const cleanPhone = getCleanPhoneForWhatsApp(candidate.phone);
-        if (!cleanPhone) {
-          addSendResultHTML(candidate, 'whatsapp', `No se detectó un número celular de WhatsApp válido en el CV.`);
-          continue;
-        }
-
-        const encodedMessage = encodeURIComponent(message);
-        const waLink = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
-
-        // Intentar envío vía API Twilio
-        try {
-          const res = await fetch('/api/send-whatsapp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: candidate.phone, candidateName: candidate.name, message: message })
-          });
-          const data = await res.json();
-
-          if (data.ok && !data.simulated) {
-            addSendResultHTML(candidate, 'whatsapp', `Enviado por API de WhatsApp. (${data.message})`);
-          } else {
-            // Ofrecer botón directo de 1-clic para WhatsApp Web/App
-            addSendResultHTML(candidate, 'whatsapp',
-              `WhatsApp preparado para ${candidate.name} (+${cleanPhone}). <br>` +
-              `<a href="${waLink}" target="_blank" class="btn" style="margin-top:6px; padding:6px 12px; font-size:11px;">Abrir chat directo de WhatsApp</a>`, true);
+    if (batchRes.ok) {
+      const batchData = await batchRes.json();
+      if (batchData.ok && batchData.results) {
+        isBackendLive = true;
+        $('send-results').innerHTML = '';
+        for (const resItem of batchData.results) {
+          for (const disp of resItem.dispatches) {
+            if (disp.channel === 'whatsapp' && disp.simulated) {
+              const cleanP = getCleanPhoneForWhatsApp(resItem.phone);
+              const link = `https://wa.me/${cleanP}?text=${encodeURIComponent(personalizedMessage({name: resItem.name}))}`;
+              pendingWaLinks.push({ name: resItem.name, link });
+              addSendResultHTML(resItem, 'whatsapp', `WhatsApp preparado para ${resItem.name} (+${cleanP}). <a href="${link}" target="_blank" class="btn" style="padding:4px 8px; font-size:11px;">Abrir Chat</a>`);
+            } else {
+              addSendResultHTML(resItem, disp.channel, disp.message || (disp.ok ? 'Enviado exitosamente.' : 'Error'));
+            }
           }
-        } catch (e) {
-          addSendResultHTML(candidate, 'whatsapp',
-            `Preparado para ${candidate.name} (+${cleanPhone}). <br>` +
-            `<a href="${waLink}" target="_blank" class="btn" style="margin-top:6px; padding:6px 12px; font-size:11px;">Abrir chat directo de WhatsApp</a>`, true);
         }
       }
+    }
+  } catch (e) {
+    console.log('Backend masivo no disponible localmente, usando ejecutor estático:', e.message);
+  }
 
-      if (channel === 'email') {
-        if (!candidate.email) {
-          addSendResultHTML(candidate, 'email', `No se detectó un correo válido en el CV.`);
-          continue;
+  // Si se ejecuta en modo estático o backend no devolvió batch completo:
+  if (!isBackendLive) {
+    $('send-results').innerHTML = '';
+
+    for (const candidate of selected) {
+      const message = personalizedMessage(candidate);
+
+      for (const channel of channels) {
+        if (channel === 'whatsapp') {
+          const cleanPhone = getCleanPhoneForWhatsApp(candidate.phone);
+          if (!cleanPhone) {
+            addSendResultHTML(candidate, 'whatsapp', `No se detectó un número celular de WhatsApp en el CV.`);
+            continue;
+          }
+
+          const encodedMessage = encodeURIComponent(message);
+          const waLink = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+          pendingWaLinks.push({ name: candidate.name, link: waLink });
+
+          addSendResultHTML(candidate, 'whatsapp',
+            `WhatsApp preparado para ${candidate.name} (+${cleanPhone}). <br>` +
+            `<a href="${waLink}" target="_blank" class="btn" style="margin-top:4px; padding:5px 10px; font-size:11px;">Abrir chat de ${candidate.name}</a>`);
         }
 
-        try {
-          const res = await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              to: candidate.email,
-              candidateName: candidate.name,
-              subject: 'Invitación a Entrevista - CandidateIQ',
-              message: message
-            })
-          });
+        if (channel === 'email') {
+          if (!candidate.email) {
+            addSendResultHTML(candidate, 'email', `No se detectó un correo válido en el CV.`);
+            continue;
+          }
 
-          const data = await res.json();
-          addSendResultHTML(candidate, 'email', data.message || data.error || 'Procesado.');
-        } catch (err) {
-          addSendResultHTML(candidate, 'email', err.message || 'Error de envío de correo.');
+          try {
+            const res = await fetch('/api/send-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                to: candidate.email,
+                candidateName: candidate.name,
+                subject: 'Invitación a Entrevista - CandidateIQ',
+                message: message
+              })
+            });
+
+            const data = await res.json();
+            addSendResultHTML(candidate, 'email', data.message || data.error || 'Correo procesado.');
+          } catch (err) {
+            addSendResultHTML(candidate, 'email', `Para envíos en vivo de correo, ingresa mediante la URL web de tu servidor Render (ej. candidateiq.onrender.com).`);
+          }
         }
       }
     }
   }
 
+  if (pendingWaLinks.length > 0) {
+    $('open-all-wa-btn').style.display = 'inline-flex';
+  } else {
+    $('open-all-wa-btn').style.display = 'none';
+  }
+
   $('enviar-btn').disabled = false;
 });
 
-function addSendResultHTML(candidate, channel, htmlContent, isLink = false) {
+$('open-all-wa-btn').addEventListener('click', () => {
+  if (!pendingWaLinks.length) return;
+  pendingWaLinks.forEach(item => {
+    window.open(item.link, '_blank');
+  });
+});
+
+function addSendResultHTML(candidate, channel, htmlContent) {
   const div = document.createElement('div');
   div.className = 'send-item';
   div.innerHTML = `<strong>${candidate.name} (${channel.toUpperCase()})</strong>: ${htmlContent}`;
@@ -816,6 +856,7 @@ $('limpiar-btn').addEventListener('click', () => {
   state.files = [];
   state.candidates = [];
   state.selectedIds.clear();
+  pendingWaLinks = [];
 
   $('file-input').value = '';
   $('file-list').innerHTML = '';
@@ -828,6 +869,7 @@ $('limpiar-btn').addEventListener('click', () => {
   $('puestos').value = 1;
   $('requeridas').value = '';
   $('excluyentes').value = '';
+  $('open-all-wa-btn').style.display = 'none';
 });
 
 /* PDF.js Worker */
