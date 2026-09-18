@@ -13,22 +13,35 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // -------------------------------------------------------------
-// HELPER: TRANSPORTE DE CORREO (SMTP / NODEMAILER)
+// HELPER: ENVÍO DE CORREO VÍA BREVO API (300 CORREOS/DÍA GRATIS A CUALQUIER CORREO)
 // -------------------------------------------------------------
-function getEmailTransporter() {
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+async function sendWithBrevo({ to, candidateName, subject, text, html }) {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) return null;
 
-  if (host && user && pass) {
-    return nodemailer.createTransport({
-      host: host,
-      port: parseInt(process.env.SMTP_PORT || '587', 10),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: { user, pass }
-    });
+  const senderEmail = process.env.EMAIL_FROM_ADDRESS || 'candidateiq.seleccion@gmail.com';
+  const senderName = process.env.EMAIL_FROM_NAME || 'CandidateIQ Selección';
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': apiKey,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      sender: { name: senderName, email: senderEmail },
+      to: [{ email: to, name: candidateName || 'Candidato' }],
+      subject: subject,
+      htmlContent: html || text
+    })
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || data.code || 'Error enviando correo con Brevo API');
   }
-  return null;
+  return data;
 }
 
 // -------------------------------------------------------------
@@ -63,6 +76,25 @@ async function sendWithResend({ to, subject, text, html }) {
 }
 
 // -------------------------------------------------------------
+// HELPER: TRANSPORTE DE CORREO (SMTP / NODEMAILER)
+// -------------------------------------------------------------
+function getEmailTransporter() {
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (host && user && pass) {
+    return nodemailer.createTransport({
+      host: host,
+      port: parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: { user, pass }
+    });
+  }
+  return null;
+}
+
+// -------------------------------------------------------------
 // HELPER: CLIENTE DE WHATSAPP (TWILIO)
 // -------------------------------------------------------------
 function getTwilioClient() {
@@ -75,7 +107,7 @@ function getTwilioClient() {
 }
 
 // -------------------------------------------------------------
-// ENDPOINT API: ENVIAR EMAIL (RESEND > SMTP > SIMULACIÓN)
+// ENDPOINT API: ENVIAR EMAIL (BREVO > RESEND > SMTP > SIMULACIÓN)
 // -------------------------------------------------------------
 app.post('/api/send-email', async (req, res) => {
   try {
@@ -104,13 +136,19 @@ app.post('/api/send-email', async (req, res) => {
       </div>
     </div>`;
 
-    // 1. Intentar con RESEND API si RESEND_API_KEY está configurada
-    if (process.env.RESEND_API_KEY) {
-      const result = await sendWithResend({ to, subject: emailSubject, text: finalMessage, html: htmlBody });
-      return res.json({ ok: true, message: 'Correo real enviado exitosamente vía Resend API.', id: result.id });
+    // 1. Intentar con BREVO API (Permite enviar a CUALQUIER correo destino gratis)
+    if (process.env.BREVO_API_KEY) {
+      const result = await sendWithBrevo({ to, candidateName, subject: emailSubject, text: finalMessage, html: htmlBody });
+      return res.json({ ok: true, message: 'Correo enviado exitosamente a cualquier destino vía Brevo API.', messageId: result.messageId });
     }
 
-    // 2. Intentar con SMTP si está configurado
+    // 2. Intentar con RESEND API
+    if (process.env.RESEND_API_KEY) {
+      const result = await sendWithResend({ to, subject: emailSubject, text: finalMessage, html: htmlBody });
+      return res.json({ ok: true, message: 'Correo enviado exitosamente vía Resend API.', id: result.id });
+    }
+
+    // 3. Intentar con SMTP
     const transporter = getEmailTransporter();
     if (transporter) {
       const fromAddress = process.env.EMAIL_FROM || 'CandidateIQ <no-reply@candidateiq.com>';
@@ -124,12 +162,12 @@ app.post('/api/send-email', async (req, res) => {
       return res.json({ ok: true, message: 'Correo enviado exitosamente vía SMTP.', messageId: info.messageId });
     }
 
-    // 3. Simulación si no hay credenciales de email
+    // 4. Simulación
     console.log(`[SIMULACIÓN EMAIL CandidateIQ] Hacia: ${to} | Asunto: ${emailSubject}`);
     return res.json({
       ok: true,
       simulated: true,
-      message: `[Simulación] Correo preparado para ${to}. Configura RESEND_API_KEY en Render para envíos reales.`
+      message: `[Simulación] Correo preparado para ${to}. Configura BREVO_API_KEY en Render para envíos reales a cualquier correo.`
     });
 
   } catch (error) {
@@ -189,7 +227,7 @@ app.post('/api/send-whatsapp', async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// ENDPOINT MCP (MODEL CONTEXT PROTOCOL OVER HTTP JSON-RPC)
+// ENDPOINT MCP
 // -------------------------------------------------------------
 app.post('/api/mcp', async (req, res) => {
   const { jsonrpc, method, params, id } = req.body;
@@ -206,7 +244,7 @@ app.post('/api/mcp', async (req, res) => {
         tools: [
           {
             name: 'send_candidate_email',
-            description: 'Envía un correo a un candidato (vía Resend o SMTP).',
+            description: 'Envía un correo a un candidato (vía Brevo, Resend o SMTP).',
             inputSchema: {
               type: 'object',
               properties: {
@@ -246,6 +284,15 @@ app.post('/api/mcp', async (req, res) => {
         finalMessage = `Estimado(a) Candidato(a) ${candidateName || ''},\n\n${finalMessage}`;
       }
 
+      if (process.env.BREVO_API_KEY) {
+        try {
+          const brevoResult = await sendWithBrevo({ to, candidateName, subject: subject || 'Invitación a Entrevista - CandidateIQ', text: finalMessage });
+          return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `Correo enviado a cualquier correo vía Brevo API (ID: ${brevoResult.messageId})` }] } });
+        } catch (e) {
+          return res.json({ jsonrpc: '2.0', id, result: { isError: true, content: [{ type: 'text', text: `Error Brevo: ${e.message}` }] } });
+        }
+      }
+
       if (process.env.RESEND_API_KEY) {
         try {
           const resendResult = await sendWithResend({ to, subject: subject || 'Invitación a Entrevista - CandidateIQ', text: finalMessage });
@@ -255,22 +302,7 @@ app.post('/api/mcp', async (req, res) => {
         }
       }
 
-      const transporter = getEmailTransporter();
-      if (transporter) {
-        try {
-          await transporter.sendMail({
-            from: process.env.EMAIL_FROM || 'CandidateIQ <no-reply@candidateiq.com>',
-            to,
-            subject: subject || 'Invitación a Entrevista - CandidateIQ',
-            text: finalMessage
-          });
-          return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `Correo enviado con éxito vía SMTP a ${to}` }] } });
-        } catch (e) {
-          return res.json({ jsonrpc: '2.0', id, result: { isError: true, content: [{ type: 'text', text: `Error enviando correo: ${e.message}` }] } });
-        }
-      }
-
-      return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `[MCP Simulación] Correo para ${to} preparado. Configura RESEND_API_KEY para envíos reales.` }] } });
+      return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `[MCP Simulación] Correo preparado para ${to}.` }] } });
     }
 
     if (name === 'send_candidate_whatsapp') {
@@ -293,7 +325,7 @@ app.post('/api/mcp', async (req, res) => {
           return res.json({ jsonrpc: '2.0', id, result: { isError: true, content: [{ type: 'text', text: `Error enviando WhatsApp: ${e.message}` }] } });
         }
       } else {
-        return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `[MCP Simulación] WhatsApp para ${phone} preparado. Configura Twilio para envíos reales.` }] } });
+        return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `[MCP Simulación] WhatsApp para ${phone} preparado.` }] } });
       }
     }
 
@@ -309,7 +341,7 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`====================================================`);
-  console.log(`  CandidateIQ - Plataforma en Ejecución (Soporte Resend)`);
+  console.log(`  CandidateIQ - Plataforma en Ejecución (Soporte Brevo & Resend)`);
   console.log(`  Servidor Web: http://localhost:${PORT}`);
   console.log(`  Endpoint MCP: http://localhost:${PORT}/api/mcp`);
   console.log(`====================================================`);
