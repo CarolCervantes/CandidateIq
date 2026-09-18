@@ -87,7 +87,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 10px; background: var(--ink);
   color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 13.5px; padding: 13px 20px;
-  border: none; cursor: pointer; transition: background 0.2s;
+  border: none; cursor: pointer; transition: background 0.2s; text-decoration: none;
 }
 .btn:hover { background: var(--accent); }
 .btn:active { transform: translateY(1px); }
@@ -156,7 +156,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 }
 .channel input { margin-right: 7px; width: auto; }
 .send-results { margin-top: 18px; display: grid; gap: 8px; }
-.send-item { padding: 10px; border: 1px solid var(--line); font-size: 12px; background: var(--card); color: var(--ink); }
+.send-item { padding: 12px; border: 1px solid var(--line); font-size: 12px; background: var(--card); color: var(--ink); display: flex; flex-direction: column; gap: 8px; }
 
 /* Theme Toggle Sun / Moon Icon in Bottom Right */
 .theme-toggle {
@@ -313,7 +313,6 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 
 <!-- BOTÓN MODO CLARO / OSCURO (SOL / LUNA MINIMALISTA) -->
 <button class="theme-toggle" id="theme-toggle" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema">
-  <!-- Ícono Sol (Modo claro activo) -->
   <svg id="sun-icon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="12" cy="12" r="5"></circle>
     <line x1="12" y1="1" x2="12" y2="3"></line>
@@ -325,7 +324,6 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
     <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
     <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
   </svg>
-  <!-- Ícono Luna (Modo oscuro activo) -->
   <svg id="moon-icon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
   </svg>
@@ -366,7 +364,6 @@ themeToggleBtn.addEventListener('click', () => {
   setTheme(isDark ? 'light' : 'dark');
 });
 
-// Cargar tema guardado o preferido
 const savedTheme = localStorage.getItem('candidateiq-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 setTheme(savedTheme);
 
@@ -400,9 +397,7 @@ function extractEmail(text) {
   return match ? match[0] : '';
 }
 
-// Extracción inteligente de Teléfono (Evita confundir Cédula / Documento con Teléfono)
 function extractPhone(text) {
-  // 1. Buscar etiquetas explícitas (Teléfono, Celular, Tel, Cel, Movil, WhatsApp, Phone)
   const labelMatch = text.match(/(?:tel[eé]fono|celular|cel|whatsapp|m[oó]vil|phone|contact[o]?)\s*[:.-]?\s*(\+?\d[\d\s().-]{7,18}\d)/i);
   if (labelMatch) {
     const digits = labelMatch[1].replace(/\D/g, '');
@@ -411,23 +406,18 @@ function extractPhone(text) {
     }
   }
 
-  // 2. Formato Colombia (Celular de 10 dígitos que inicia por 3, o +573...)
   const colMatch = text.match(/(?:\+?57\s*)?(3\d{2}[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2})/);
   if (colMatch) return colMatch[0].trim();
 
-  // 3. Formato Internacional (+código país)
   const intlMatch = text.match(/\+\d{1,4}[\s.-]?\d{2,4}[\s.-]?\d{3,4}[\s.-]?\d{3,4}/);
   if (intlMatch) return intlMatch[0].trim();
 
-  // 4. Buscar otros posibles patrones de 10 dígitos que no sean cédulas (evitar cédulas colombianas 1.0xx / 1.1xx)
   const candidates = text.match(/\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}\b/g) || [];
   for (const raw of candidates) {
     const digits = raw.replace(/\D/g, '');
-    // Los celulares en Colombia inician por 3; en México por 5/8; en España por 6/7; etc.
     if (digits.length === 10 && (digits.startsWith('3') || digits.startsWith('5') || digits.startsWith('8') || digits.startsWith('6'))) {
       return raw.trim();
     }
-    // Ignorar si parece un número de cédula colombiana típica (10 u 11 dígitos iniciando por 11... o 10...)
     if (digits.length >= 7 && digits.length <= 13 && !digits.startsWith('114') && !digits.startsWith('10')) {
       return raw.trim();
     }
@@ -705,7 +695,16 @@ $('modal').addEventListener('click', e => {
 $('preview-btn').addEventListener('click', updatePreview);
 ['fecha','hora','lugar'].forEach(id => $(id).addEventListener('input', updatePreview));
 
-/* ---------- ENVÍO REAL VÍA BACKEND API / MCP ---------- */
+/* ---------- ENVÍO DE CITACIONES (EMAIL API & ENLACE DIRECTO GRATUITO A WHATSAPP) ---------- */
+
+function getCleanPhoneForWhatsApp(phone) {
+  if (!phone) return '';
+  let digits = phone.replace(/\D/g, '');
+  if (digits.length === 10 && digits.startsWith('3')) {
+    return '57' + digits; // Código de país Colombia por defecto
+  }
+  return digits;
+}
 
 $('enviar-btn').addEventListener('click', async () => {
   const selected = getSelectedCandidates();
@@ -740,37 +739,63 @@ $('enviar-btn').addEventListener('click', async () => {
     const message = personalizedMessage(candidate);
 
     for (const channel of channels) {
-      const target = channel === 'whatsapp' ? candidate.phone : candidate.email;
+      if (channel === 'whatsapp') {
+        const cleanPhone = getCleanPhoneForWhatsApp(candidate.phone);
+        if (!cleanPhone) {
+          addSendResultHTML(candidate, 'whatsapp', `No se detectó un número celular de WhatsApp válido en el CV.`);
+          continue;
+        }
 
-      if (!target) {
-        addSendResult(candidate, channel, false,
-          `No se detectó ${channel === 'whatsapp' ? 'teléfono' : 'correo'} válido en el CV.`);
-        continue;
+        const encodedMessage = encodeURIComponent(message);
+        const waLink = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+
+        // Intentar envío vía API Twilio
+        try {
+          const res = await fetch('/api/send-whatsapp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: candidate.phone, candidateName: candidate.name, message: message })
+          });
+          const data = await res.json();
+
+          if (data.ok && !data.simulated) {
+            addSendResultHTML(candidate, 'whatsapp', `Enviado por API de WhatsApp. (${data.message})`);
+          } else {
+            // Ofrecer botón directo de 1-clic para WhatsApp Web/App
+            addSendResultHTML(candidate, 'whatsapp',
+              `WhatsApp preparado para ${candidate.name} (+${cleanPhone}). <br>` +
+              `<a href="${waLink}" target="_blank" class="btn" style="margin-top:6px; padding:6px 12px; font-size:11px;">Abrir chat directo de WhatsApp</a>`, true);
+          }
+        } catch (e) {
+          addSendResultHTML(candidate, 'whatsapp',
+            `Preparado para ${candidate.name} (+${cleanPhone}). <br>` +
+            `<a href="${waLink}" target="_blank" class="btn" style="margin-top:6px; padding:6px 12px; font-size:11px;">Abrir chat directo de WhatsApp</a>`, true);
+        }
       }
 
-      try {
-        const endpoint = channel === 'whatsapp' ? '/api/send-whatsapp' : '/api/send-email';
-        const payload = channel === 'whatsapp' ? {
-          phone: candidate.phone,
-          candidateName: candidate.name,
-          message: message
-        } : {
-          to: candidate.email,
-          candidateName: candidate.name,
-          subject: 'Invitación a Entrevista - CandidateIQ',
-          message: message
-        };
+      if (channel === 'email') {
+        if (!candidate.email) {
+          addSendResultHTML(candidate, 'email', `No se detectó un correo válido en el CV.`);
+          continue;
+        }
 
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+        try {
+          const res = await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: candidate.email,
+              candidateName: candidate.name,
+              subject: 'Invitación a Entrevista - CandidateIQ',
+              message: message
+            })
+          });
 
-        const data = await res.json();
-        addSendResult(candidate, channel, data.ok !== false, data.message || data.error || 'Procesado.');
-      } catch (err) {
-        addSendResult(candidate, channel, false, err.message || 'Error de envío.');
+          const data = await res.json();
+          addSendResultHTML(candidate, 'email', data.message || data.error || 'Procesado.');
+        } catch (err) {
+          addSendResultHTML(candidate, 'email', err.message || 'Error de envío de correo.');
+        }
       }
     }
   }
@@ -778,10 +803,10 @@ $('enviar-btn').addEventListener('click', async () => {
   $('enviar-btn').disabled = false;
 });
 
-function addSendResult(candidate, channel, ok, message) {
+function addSendResultHTML(candidate, channel, htmlContent, isLink = false) {
   const div = document.createElement('div');
   div.className = 'send-item';
-  div.textContent = `${ok ? 'Enviado' : 'Aviso'} — ${candidate.name} (${channel.toUpperCase()}): ${message}`;
+  div.innerHTML = `<strong>${candidate.name} (${channel.toUpperCase()})</strong>: ${htmlContent}`;
   $('send-results').appendChild(div);
 }
 
