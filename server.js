@@ -95,6 +95,36 @@ function getEmailTransporter() {
 }
 
 // -------------------------------------------------------------
+// HELPER: ENVÍO AUTOMÁTICO DE WHATSAPP VÍA GREEN API (EN SEGUNDO PLANO)
+// -------------------------------------------------------------
+async function sendWhatsAppGreenAPI({ phone, message }) {
+  const instanceId = process.env.GREEN_API_INSTANCE;
+  const apiToken = process.env.GREEN_API_TOKEN;
+
+  if (!instanceId || !apiToken) return null;
+
+  let cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone.length === 10 && cleanPhone.startsWith('3')) {
+    cleanPhone = '57' + cleanPhone;
+  }
+
+  const response = await fetch(`https://api.green-api.com/waInstance${instanceId}/sendMessage/${apiToken}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chatId: `${cleanPhone}@c.us`,
+      message: message
+    })
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Error enviando WhatsApp con Green API');
+  }
+  return data;
+}
+
+// -------------------------------------------------------------
 // HELPER: CLIENTE DE WHATSAPP (TWILIO)
 // -------------------------------------------------------------
 function getTwilioClient() {
@@ -131,9 +161,6 @@ app.post('/api/send-email', async (req, res) => {
       <div style="padding: 24px; background-color: #ffffff;">
         ${finalMessage.split('\n\n').map(p => `<p style="margin-bottom: 14px;">${p.replace(/\n/g, '<br>')}</p>`).join('')}
       </div>
-      <div style="background-color: #f8fafc; padding: 12px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b;">
-        Este es un correo automático enviado por CandidateIQ en nombre del equipo de selección.
-      </div>
     </div>`;
 
     if (process.env.BREVO_API_KEY) {
@@ -159,7 +186,6 @@ app.post('/api/send-email', async (req, res) => {
       return res.json({ ok: true, message: 'Correo enviado vía SMTP.', messageId: info.messageId });
     }
 
-    console.log(`[SIMULACIÓN EMAIL CandidateIQ] Hacia: ${to} | Asunto: ${emailSubject}`);
     return res.json({
       ok: true,
       simulated: true,
@@ -173,7 +199,7 @@ app.post('/api/send-email', async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// ENDPOINT API: ENVIAR WHATSAPP INDIVIDUAL
+// ENDPOINT API: ENVIAR WHATSAPP INDIVIDUAL (GREEN API > TWILIO > SIMULACIÓN)
 // -------------------------------------------------------------
 app.post('/api/send-whatsapp', async (req, res) => {
   try {
@@ -183,39 +209,42 @@ app.post('/api/send-whatsapp', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Faltan parámetros requeridos (phone, message).' });
     }
 
-    let cleanPhone = phone.replace(/[^\d+]/g, '');
-    if (!cleanPhone.startsWith('+')) {
-      if (cleanPhone.length === 10 && cleanPhone.startsWith('3')) {
-        cleanPhone = '+57' + cleanPhone;
-      } else {
-        cleanPhone = '+' + cleanPhone;
-      }
-    }
-
     let finalMessage = message;
     if (!finalMessage.trim().startsWith('Estimado(a) Candidato(a)')) {
       finalMessage = `Estimado(a) Candidato(a),\n\n${finalMessage}`;
     }
 
-    const client = getTwilioClient();
-    const fromNumber = process.env.TWILIO_WHATSAPP_NUMBER || '+14155238886';
+    // 1. Intentar envío automático en segundo plano vía Green API
+    if (process.env.GREEN_API_INSTANCE && process.env.GREEN_API_TOKEN) {
+      const greenResult = await sendWhatsAppGreenAPI({ phone, message: finalMessage });
+      return res.json({ ok: true, message: 'Mensaje de WhatsApp enviado 100% automático vía Green API.', idMessage: greenResult.idMessage });
+    }
 
+    // 2. Intentar vía Twilio API
+    const client = getTwilioClient();
     if (client) {
+      let cleanPhone = phone.replace(/[^\d+]/g, '');
+      if (!cleanPhone.startsWith('+')) {
+        if (cleanPhone.length === 10 && cleanPhone.startsWith('3')) cleanPhone = '+57' + cleanPhone;
+        else cleanPhone = '+' + cleanPhone;
+      }
+
       const response = await client.messages.create({
-        from: `whatsapp:${fromNumber}`,
+        from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER || '+14155238886'}`,
         to: `whatsapp:${cleanPhone}`,
         body: finalMessage
       });
 
       return res.json({ ok: true, message: 'Mensaje de WhatsApp enviado vía Twilio API.', sid: response.sid });
-    } else {
-      console.log(`[SIMULACIÓN WHATSAPP CandidateIQ] Hacia: ${cleanPhone}`);
-      return res.json({
-        ok: true,
-        simulated: true,
-        message: `[Simulación] Mensaje preparado para WhatsApp (${cleanPhone}).`
-      });
     }
+
+    // 3. Simulación con enlace directo si no hay API de WhatsApp en Render
+    return res.json({
+      ok: true,
+      simulated: true,
+      message: `WhatsApp preparado para ${phone}. Configura GREEN_API_INSTANCE en Render para envíos 100% automáticos en segundo plano.`
+    });
+
   } catch (error) {
     console.error('Error enviando WhatsApp:', error);
     return res.status(500).json({ ok: false, error: error.message });
@@ -238,7 +267,6 @@ app.post('/api/send-batch', async (req, res) => {
     for (const candidate of candidates) {
       const candidateResult = { name: candidate.name, email: candidate.email, phone: candidate.phone, dispatches: [] };
 
-      // Ensure body starts with Estimado(a) Candidato(a),
       let finalMessage = message;
       if (!finalMessage.trim().startsWith('Estimado(a) Candidato(a)')) {
         finalMessage = `Estimado(a) Candidato(a),\n\n${finalMessage}`;
@@ -259,19 +287,13 @@ app.post('/api/send-batch', async (req, res) => {
 
         try {
           if (process.env.BREVO_API_KEY) {
-            const brevoRes = await sendWithBrevo({ to: candidate.email, candidateName: candidate.name, subject: emailSubject, text: finalMessage, html: htmlBody });
+            await sendWithBrevo({ to: candidate.email, candidateName: candidate.name, subject: emailSubject, text: finalMessage, html: htmlBody });
             candidateResult.dispatches.push({ channel: 'email', ok: true, message: 'Correo enviado vía Brevo API.' });
           } else if (process.env.RESEND_API_KEY) {
-            const resendRes = await sendWithResend({ to: candidate.email, subject: emailSubject, text: finalMessage, html: htmlBody });
+            await sendWithResend({ to: candidate.email, subject: emailSubject, text: finalMessage, html: htmlBody });
             candidateResult.dispatches.push({ channel: 'email', ok: true, message: 'Correo enviado vía Resend API.' });
           } else {
-            const transporter = getEmailTransporter();
-            if (transporter) {
-              await transporter.sendMail({ from: process.env.EMAIL_FROM || 'CandidateIQ <no-reply@candidateiq.com>', to: candidate.email, subject: emailSubject, text: finalMessage, html: htmlBody });
-              candidateResult.dispatches.push({ channel: 'email', ok: true, message: 'Correo enviado vía SMTP.' });
-            } else {
-              candidateResult.dispatches.push({ channel: 'email', ok: true, simulated: true, message: '[Simulación] Correo preparado.' });
-            }
+            candidateResult.dispatches.push({ channel: 'email', ok: true, simulated: true, message: '[Simulación] Correo preparado.' });
           }
         } catch (err) {
           candidateResult.dispatches.push({ channel: 'email', ok: false, message: err.message });
@@ -280,26 +302,30 @@ app.post('/api/send-batch', async (req, res) => {
 
       // WhatsApp Dispatch
       if (channels.includes('whatsapp') && candidate.phone) {
-        let cleanPhone = candidate.phone.replace(/[^\d+]/g, '');
-        if (!cleanPhone.startsWith('+')) {
-          if (cleanPhone.length === 10 && cleanPhone.startsWith('3')) cleanPhone = '+57' + cleanPhone;
-          else cleanPhone = '+' + cleanPhone;
-        }
-
-        const client = getTwilioClient();
-        if (client) {
-          try {
-            const response = await client.messages.create({
-              from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER || '+14155238886'}`,
-              to: `whatsapp:${cleanPhone}`,
-              body: finalMessage
-            });
-            candidateResult.dispatches.push({ channel: 'whatsapp', ok: true, message: 'WhatsApp enviado vía Twilio API.' });
-          } catch (err) {
-            candidateResult.dispatches.push({ channel: 'whatsapp', ok: false, message: err.message });
+        try {
+          if (process.env.GREEN_API_INSTANCE && process.env.GREEN_API_TOKEN) {
+            await sendWhatsAppGreenAPI({ phone: candidate.phone, message: finalMessage });
+            candidateResult.dispatches.push({ channel: 'whatsapp', ok: true, message: 'WhatsApp enviado 100% automático vía Green API.' });
+          } else {
+            const client = getTwilioClient();
+            if (client) {
+              let cleanPhone = candidate.phone.replace(/[^\d+]/g, '');
+              if (!cleanPhone.startsWith('+')) {
+                if (cleanPhone.length === 10 && cleanPhone.startsWith('3')) cleanPhone = '+57' + cleanPhone;
+                else cleanPhone = '+' + cleanPhone;
+              }
+              await client.messages.create({
+                from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER || '+14155238886'}`,
+                to: `whatsapp:${cleanPhone}`,
+                body: finalMessage
+              });
+              candidateResult.dispatches.push({ channel: 'whatsapp', ok: true, message: 'WhatsApp enviado vía Twilio API.' });
+            } else {
+              candidateResult.dispatches.push({ channel: 'whatsapp', ok: true, simulated: true, message: `WhatsApp preparado para ${candidate.phone}.` });
+            }
           }
-        } else {
-          candidateResult.dispatches.push({ channel: 'whatsapp', ok: true, simulated: true, message: `[Simulación] WhatsApp preparado para ${cleanPhone}.` });
+        } catch (err) {
+          candidateResult.dispatches.push({ channel: 'whatsapp', ok: false, message: err.message });
         }
       }
 
@@ -380,26 +406,26 @@ app.post('/api/mcp', async (req, res) => {
         }
       }
 
-      if (process.env.RESEND_API_KEY) {
-        try {
-          const resendResult = await sendWithResend({ to, subject: subject || 'Invitación a Entrevista - CandidateIQ', text: finalMessage });
-          return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `Correo enviado vía Resend API (ID: ${resendResult.id})` }] } });
-        } catch (e) {
-          return res.json({ jsonrpc: '2.0', id, result: { isError: true, content: [{ type: 'text', text: `Error Resend: ${e.message}` }] } });
-        }
-      }
-
       return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `[MCP Simulación] Correo preparado para ${to}.` }] } });
     }
 
     if (name === 'send_candidate_whatsapp') {
       const { phone, candidateName, message } = args;
-      const client = getTwilioClient();
       let finalMessage = message || '';
       if (!finalMessage.trim().startsWith('Estimado(a) Candidato(a)')) {
         finalMessage = `Estimado(a) Candidato(a),\n\n${finalMessage}`;
       }
 
+      if (process.env.GREEN_API_INSTANCE && process.env.GREEN_API_TOKEN) {
+        try {
+          const greenResult = await sendWhatsAppGreenAPI({ phone, message: finalMessage });
+          return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `WhatsApp enviado 100% automático vía Green API (ID: ${greenResult.idMessage})` }] } });
+        } catch (e) {
+          return res.json({ jsonrpc: '2.0', id, result: { isError: true, content: [{ type: 'text', text: `Error Green API: ${e.message}` }] } });
+        }
+      }
+
+      const client = getTwilioClient();
       if (client) {
         try {
           const resp = await client.messages.create({
@@ -411,9 +437,9 @@ app.post('/api/mcp', async (req, res) => {
         } catch (e) {
           return res.json({ jsonrpc: '2.0', id, result: { isError: true, content: [{ type: 'text', text: `Error enviando WhatsApp: ${e.message}` }] } });
         }
-      } else {
-        return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `[MCP Simulación] WhatsApp para ${phone} preparado.` }] } });
       }
+
+      return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `[MCP Simulación] WhatsApp para ${phone} preparado.` }] } });
     }
 
     return res.status(404).json({ jsonrpc: '2.0', error: { code: -32601, message: 'Tool not found' }, id });
