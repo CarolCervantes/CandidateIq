@@ -1,0 +1,30 @@
+{
+  "name": "candidateiq",
+  "version": "1.0.0",
+  "description": "CandidateIQ - Plataforma Inteligente de Filtrado de CVs, Servidor MCP e Integración de Notificaciones vía Email y WhatsApp",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "mcp": "node mcp-server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "hr-tech",
+    "recruitment",
+    "cv-parser",
+    "mcp",
+    "whatsapp",
+    "email",
+    "ai-agent"
+  ],
+  "author": "CandidateIQ Team",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "nodemailer": "^6.9.13",
+    "twilio": "^5.0.0"
+  }
+}
