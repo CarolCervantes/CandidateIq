@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CandidateIQ v2 — Selección de Candidatos & Mistral OCR 3</title>
+<title>CandidateIQ v2 — Selección de Candidatos & OCR</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -53,12 +53,23 @@ body {
   transition: background 0.3s ease, color 0.3s ease;
 }
 
-/* SIDEBAR RE TRÁCTIL */
+/* SIDEBAR EXPANDIBLE / COLAPSABLE */
 .sidebar {
-  width: 280px; background: var(--sidebar-bg); border-right: 1px solid var(--line-strong);
-  padding: 28px 20px; display: flex; flex-direction: column; gap: 24px; transition: transform 0.3s ease;
-  z-index: 900; flex-shrink: 0;
+  width: 270px; background: var(--sidebar-bg); border-right: 1px solid var(--line-strong);
+  padding: 24px 18px; display: flex; flex-direction: column; gap: 20px; transition: width 0.3s ease, padding 0.3s ease;
+  z-index: 900; flex-shrink: 0; position: relative;
 }
+.sidebar.collapsed { width: 64px; padding: 24px 10px; }
+.sidebar.collapsed .sidebar-title,
+.sidebar.collapsed .kicker,
+.sidebar.collapsed .nav-text { display: none; }
+
+.toggle-sidebar-btn {
+  background: transparent; border: 1px solid var(--line); color: var(--ink);
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 6px; cursor: pointer;
+  border-radius: 4px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px;
+}
+
 .sidebar-title { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 600; }
 .nav-list { display: flex; flex-direction: column; gap: 6px; list-style: none; }
 .nav-item {
@@ -178,7 +189,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 .send-results { margin-top: 18px; display: grid; gap: 8px; }
 .send-item { padding: 12px; border: 1px solid var(--line); font-size: 12px; background: var(--card); color: var(--ink); display: flex; flex-direction: column; gap: 8px; }
 
-/* THEME TOGGLE SUN / MOON */
+/* THEME TOGGLE SUN / MOON (MINIMAL SVG) */
 .theme-toggle {
   position: fixed; bottom: 24px; right: 24px; width: 44px; height: 44px; border-radius: 50%;
   background: var(--card); border: 1px solid var(--line-strong); color: var(--ink);
@@ -201,6 +212,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 @media(max-width:850px) {
   body { flex-direction: column; }
   .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--line-strong); }
+  .sidebar.collapsed { width: 100%; }
   .two { grid-template-columns: 1fr; }
 }
 </style>
@@ -208,21 +220,29 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 
 <body>
 
-<!-- MENU LATERAL RE TRÁCTIL -->
-<aside class="sidebar">
+<!-- MENU LATERAL EXPANDIBLE / COLAPSABLE SIN EMOJIS -->
+<aside class="sidebar" id="sidebar">
+  <button type="button" class="toggle-sidebar-btn" id="toggle-sidebar" title="Expandir/Colapsar Menú">
+    <span id="sidebar-icon">≡</span>
+  </button>
+
   <div>
     <div class="kicker">candidateiq</div>
-    <div class="sidebar-title">CandidateIQ v2</div>
+    <div class="sidebar-title">CandidateIQ</div>
   </div>
+
   <ul class="nav-list">
     <li class="nav-item active" data-view="evaluacion">
-      ⚡ Evaluación & Diplomas
+      <span class="nav-icon">1</span>
+      <span class="nav-text">Evaluación & Archivos</span>
     </li>
     <li class="nav-item" data-view="historial">
-      📋 Historial de Cargos
+      <span class="nav-icon">2</span>
+      <span class="nav-text">Historial de Cargos</span>
     </li>
     <li class="nav-item" data-view="talentos">
-      🗄️ Banco de Talentos
+      <span class="nav-icon">3</span>
+      <span class="nav-text">Banco de Talentos</span>
     </li>
   </ul>
 </aside>
@@ -230,13 +250,13 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 <!-- CONTENIDO PRINCIPAL -->
 <div class="content-wrapper">
 
-  <!-- VISTA 1: EVALUACIÓN Y LECTURA DE DIPLOMAS (MISTRAL OCR 3) -->
+  <!-- VISTA 1: EVALUACIÓN Y LECTURA DE DOCUMENTOS E IMÁGENES -->
   <section class="view-section active" id="view-evaluacion">
     <div class="kicker">candidateiq / evaluador masivo & ocr</div>
     <h1>CandidateIQ</h1>
     <p>
-      Carga currículums, diplomas o imágenes escaneadas. CandidateIQ usa <strong>Mistral OCR 3</strong>
-      para extraer títulos y certificados, califica candidatos y permite enviar citaciones masivas por WhatsApp o correo.
+      Carga currículums, documentos o imágenes escaneadas. CandidateIQ extrae
+      títulos y certificados, califica candidatos y permite enviar citaciones masivas por WhatsApp o correo.
     </p>
 
     <div class="section">
@@ -265,22 +285,24 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
       </div>
     </div>
 
+    <!-- SECCIÓN DE CARGA MODIFICADA SIN DIPLOMAS EN EL TEXTO -->
     <div class="section">
-      <h2>2. Cargar currículums y fotos de diplomas</h2>
+      <h2>2. Cargar currículums y archivos</h2>
       <div class="upload">
         <button type="button" class="btn btn-secondary" id="upload-btn">
           Subir archivos (PDF, TXT, JPG, PNG)
         </button>
         <input type="file" id="file-input" accept=".pdf,.txt,.jpg,.jpeg,.png,.webp" multiple>
-        <span class="upload-info" id="upload-info">Acepta <strong>.pdf, .txt</strong> e imágenes/fotos de <strong>diplomas (.png, .jpg)</strong></span>
+        <span class="upload-info" id="upload-info">Acepta <strong>.pdf, .txt</strong> e imágenes/fotos (<strong>.png, .jpg</strong>)</span>
       </div>
       <div class="file-list" id="file-list"></div>
     </div>
 
+    <!-- BOTÓN MODIFICADO PARA DECIR SOLO EVALUAR -->
     <div class="section">
       <div class="actions">
         <button type="button" id="evaluar-btn" class="btn">
-          Evaluar con Mistral OCR 3 y crear ranking
+          Evaluar y crear ranking
         </button>
         <button type="button" id="guardar-vacante-btn" class="btn btn-secondary">
           Guardar vacante en Historial
@@ -321,12 +343,12 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
     <div class="kicker">candidateiq / talent pool acumulado</div>
     <h1>Banco de Talentos</h1>
     <p>
-      Todas las hojas de vida y diplomas leídos anteriormente quedan guardados aquí. Puedes re-evaluar a todos tus candidatos acumulados contra cualquier nueva vacante.
+      Todas las hojas de vida y documentos leídos anteriormente quedan guardados aquí. Puedes re-evaluar a todos tus candidatos acumulados contra cualquier nueva vacante.
     </p>
     <div class="section">
       <div class="actions" style="margin-bottom: 20px;">
         <button type="button" id="evaluar-banco-btn" class="btn">
-          ⚡ Evaluar todo el Banco de Talentos contra la vacante activa
+          Evaluar todo el Banco de Talentos contra la vacante activa
         </button>
       </div>
       <div id="talentos-lista">
@@ -393,7 +415,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
   </div>
 </div>
 
-<!-- BOTÓN TEMA CLARO / OSCURO (SOL / LUNA) -->
+<!-- BOTÓN TEMA CLARO / OSCURO (SOL / LUNA MINIMAL SVG) -->
 <button class="theme-toggle" id="theme-toggle" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema">
   <svg id="sun-icon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="12" cy="12" r="5"></circle>
@@ -422,6 +444,19 @@ const state = {
 };
 
 const $ = id => document.getElementById(id);
+
+/* ---------- SIDEBAR EXPANDIBLE / COLAPSABLE ---------- */
+const sidebar = $('sidebar');
+const toggleSidebarBtn = $('toggle-sidebar');
+
+toggleSidebarBtn.addEventListener('click', () => {
+  sidebar.classList.toggle('collapsed');
+  localStorage.setItem('candidateiq-sidebar-collapsed', sidebar.classList.contains('collapsed'));
+});
+
+if (localStorage.getItem('candidateiq-sidebar-collapsed') === 'true') {
+  sidebar.classList.add('collapsed');
+}
 
 /* ---------- NAVEGACIÓN PANEL LATERAL ---------- */
 document.querySelectorAll('.nav-item').forEach(item => {
@@ -537,13 +572,12 @@ function escapeHtml(str) {
     .replaceAll('"','&quot;').replaceAll("'","&#039;");
 }
 
-/* LECTURA DE ARCHIVOS CON MISTRAL OCR 3 PARA IMÁGENES / DIPLOMAS */
+/* LECTURA DE ARCHIVOS CON MISTRAL OCR 3 PARA IMÁGENES */
 async function readFileTextOrOCR(file) {
   const nameLower = file.name.toLowerCase();
 
-  // Si es imagen (.jpg, .png, .jpeg, .webp), usamos MISTRAL OCR 3
   if (nameLower.endsWith('.jpg') || nameLower.endsWith('.jpeg') || nameLower.endsWith('.png') || nameLower.endsWith('.webp')) {
-    showStatus(`Procesando diploma/imagen con Mistral OCR 3: ${file.name}...`, 'info');
+    showStatus(`Procesando imagen con OCR: ${file.name}...`, 'info');
     const base64 = await fileToBase64(file);
     try {
       const res = await fetch('/api/ocr', {
@@ -553,15 +587,14 @@ async function readFileTextOrOCR(file) {
       });
       const data = await res.json();
       if (data.ok && data.markdown) {
-        return `[TEXTO EXTRAÍDO CON MISTRAL OCR 3 DE DIPLOMA/IMAGEN: ${file.name}]\n\n${data.markdown}`;
+        return `[TEXTO EXTRAÍDO CON OCR DE IMAGEN: ${file.name}]\n\n${data.markdown}`;
       }
     } catch (e) {
-      console.log('Error OCR remoto, procesando nombre:', e);
+      console.log('Error OCR remoto:', e);
     }
-    return `[Diploma/Imagen: ${file.name}]`;
+    return `[Imagen: ${file.name}]`;
   }
 
-  // Si es PDF
   if (file.type === 'application/pdf' || nameLower.endsWith('.pdf')) {
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
@@ -574,7 +607,6 @@ async function readFileTextOrOCR(file) {
     return text.trim();
   }
 
-  // TXT o texto plano
   return (await file.text()).trim();
 }
 
@@ -617,7 +649,6 @@ function evaluateCandidate(text, filename, index, required, excluded) {
     selected: false
   };
 
-  // Guardar en el Banco de Talentos sin duplicados
   const existingIdx = state.talentPool.findIndex(t => t.email && t.email === cand.email);
   if (existingIdx >= 0) {
     state.talentPool[existingIdx] = cand;
@@ -803,7 +834,7 @@ $('file-input').addEventListener('change', async () => {
     </div>
   `).join('');
 
-  showStatus('Archivos cargados. Pulsa "Evaluar con Mistral OCR 3".', 'ok');
+  showStatus('Archivos cargados. Pulsa "Evaluar y crear ranking".', 'ok');
 });
 
 /* ---------- MENSAJE GENERAL MASIVO (SIN NOMBRE AL INICIO) ---------- */
@@ -871,11 +902,11 @@ $('evaluar-btn').addEventListener('click', async () => {
     const puestos = Math.max(1, parseInt($('puestos').value, 10) || 1);
 
     if (!state.files.length) {
-      showStatus('Primero carga currículums o fotos de diplomas.', 'warn');
+      showStatus('Primero carga currículums o fotos de documentos.', 'warn');
       return;
     }
 
-    showStatus('Leyendo archivos y procesando imágenes con Mistral OCR 3...', '');
+    showStatus('Leyendo archivos y procesando imágenes...', '');
     $('evaluar-btn').disabled = true;
 
     const candidates = [];
@@ -893,7 +924,7 @@ $('evaluar-btn').addEventListener('click', async () => {
     $('ranking-summary').textContent = `${candidates.length} candidato(s) evaluado(s). ${Math.min(puestos, candidates.length)} marcado(s) para entrevista.`;
     $('ranking-panel').classList.add('show');
     renderRanking();
-    showStatus('Ranking generado correctamente con lectura de diplomas.', 'ok');
+    showStatus('Ranking generado correctamente.', 'ok');
   } catch (err) {
     console.error(err);
     showStatus('Ocurrió un error: ' + err.message, 'warn');
