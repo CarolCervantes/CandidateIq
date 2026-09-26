@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CandidateIQ — Selección de candidatos</title>
+<title>CandidateIQ v2 — Selección de Candidatos & Mistral OCR 3</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -23,6 +23,7 @@
   --input-bg: #F6F4EE;
   --modal-bg: #EFEDE6;
   --candidate-bg: #FBFAF6;
+  --sidebar-bg: #E8E5DC;
 }
 
 [data-theme="dark"] {
@@ -39,6 +40,7 @@
   --input-bg: #1A1C18;
   --modal-bg: #121310;
   --candidate-bg: #161814;
+  --sidebar-bg: #181A16;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -47,19 +49,38 @@ body {
   color: var(--ink);
   font-family: 'IBM Plex Mono', monospace;
   min-height: 100vh;
-  padding: 56px 24px 80px;
+  display: flex;
   transition: background 0.3s ease, color 0.3s ease;
 }
 
-main { width: 100%; max-width: 820px; margin: 0 auto; }
+/* SIDEBAR RE TRÁCTIL */
+.sidebar {
+  width: 280px; background: var(--sidebar-bg); border-right: 1px solid var(--line-strong);
+  padding: 28px 20px; display: flex; flex-direction: column; gap: 24px; transition: transform 0.3s ease;
+  z-index: 900; flex-shrink: 0;
+}
+.sidebar-title { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 600; }
+.nav-list { display: flex; flex-direction: column; gap: 6px; list-style: none; }
+.nav-item {
+  padding: 12px 14px; border: 1px solid transparent; border-radius: 6px; cursor: pointer;
+  font-size: 13px; color: var(--ink); display: flex; align-items: center; gap: 10px; transition: all 0.2s;
+}
+.nav-item:hover { background: var(--card); border-color: var(--line); }
+.nav-item.active { background: var(--card); border-color: var(--line-strong); font-weight: 600; border-left: 3px solid var(--accent); }
+
+/* MAIN CONTENT */
+.content-wrapper { flex: 1; padding: 40px 32px 80px; overflow-y: auto; max-width: 900px; margin: 0 auto; }
+.view-section { display: none; }
+.view-section.active { display: block; }
+
 .kicker { font-size: 12px; color: var(--ink-soft); letter-spacing: .06em; margin-bottom: 14px; }
-h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 44px; line-height: 1; margin-bottom: 16px; }
-h2 { font-family: 'Fraunces', serif; font-size: 28px; margin-bottom: 14px; }
-p { font-family: system-ui, sans-serif; font-size: 15.5px; color: var(--ink-soft); line-height: 1.6; max-width: 62ch; }
-.section { margin-top: 34px; }
+h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 40px; line-height: 1; margin-bottom: 16px; }
+h2 { font-family: 'Fraunces', serif; font-size: 26px; margin-bottom: 14px; }
+p { font-family: system-ui, sans-serif; font-size: 15px; color: var(--ink-soft); line-height: 1.6; max-width: 65ch; }
+.section { margin-top: 30px; }
 
 .upload {
-  margin-top: 28px; border: 1px dashed var(--line-strong); padding: 22px;
+  margin-top: 24px; border: 1px dashed var(--line-strong); padding: 22px;
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap; background: var(--card);
 }
 .upload input[type=file] { display: none; }
@@ -71,7 +92,6 @@ p { font-family: system-ui, sans-serif; font-size: 15.5px; color: var(--ink-soft
   font-size: 12px; display: flex; justify-content: space-between; gap: 12px;
 }
 
-form { margin-top: 28px; }
 label { display: block; font-size: 12px; color: var(--ink-soft); letter-spacing: .03em; margin-bottom: 8px; }
 .field { margin-bottom: 20px; }
 .field-note { font-family: system-ui, sans-serif; font-size: 12.5px; color: var(--ink-soft); margin-top: 6px; }
@@ -80,13 +100,13 @@ textarea, input[type=text], input[type=number], input[type=date], input[type=tim
   width: 100%; background: var(--input-bg); border: 1px solid var(--line-strong); color: var(--ink);
   font-family: 'IBM Plex Mono', monospace; font-size: 13.5px; padding: 12px 14px; transition: border-color 0.2s;
 }
-textarea { min-height: 150px; line-height: 1.5; resize: vertical; }
+textarea { min-height: 140px; line-height: 1.5; resize: vertical; }
 textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 10px; background: var(--ink);
-  color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 13.5px; padding: 13px 20px;
+  color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 13.5px; padding: 12px 18px;
   border: none; cursor: pointer; transition: background 0.2s; text-decoration: none;
 }
 .btn:hover { background: var(--accent); }
@@ -106,7 +126,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 
 .panel { margin-top: 28px; padding: 22px; background: var(--card); border: 1px solid var(--line); display: none; }
 .panel.show { display: block; }
-.rule { height: 1px; background: var(--line); margin: 42px 0 24px; }
+.rule { height: 1px; background: var(--line); margin: 36px 0 24px; }
 .ranking { margin-top: 18px; display: grid; gap: 10px; }
 
 .candidate {
@@ -158,6 +178,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 .send-results { margin-top: 18px; display: grid; gap: 8px; }
 .send-item { padding: 12px; border: 1px solid var(--line); font-size: 12px; background: var(--card); color: var(--ink); display: flex; flex-direction: column; gap: 8px; }
 
+/* THEME TOGGLE SUN / MOON */
 .theme-toggle {
   position: fixed; bottom: 24px; right: 24px; width: 44px; height: 44px; border-radius: 50%;
   background: var(--card); border: 1px solid var(--line-strong); color: var(--ink);
@@ -167,94 +188,154 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 .theme-toggle:hover { transform: scale(1.08); border-color: var(--ink); }
 .theme-toggle svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
 
-@media(max-width:650px) {
-  body { padding: 36px 16px 60px; }
-  h1 { font-size: 38px; }
+/* CARDS LIST IN SIDEBAR VIEWS */
+.history-item {
+  background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 14px;
+  margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;
+}
+.talent-card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 16px;
+  margin-bottom: 12px; display: grid; grid-template-columns: 1fr auto; gap: 14px;
+}
+
+@media(max-width:850px) {
+  body { flex-direction: column; }
+  .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--line-strong); }
   .two { grid-template-columns: 1fr; }
-  .candidate { grid-template-columns: 34px 1fr; }
-  .score-badge { grid-column: 2; text-align: left; }
-  .channel-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
 
 <body>
-<main>
-  <div class="kicker">candidateiq / selección de candidatos</div>
-  <h1>CandidateIQ</h1>
-  <p>
-    Carga varios currículums, define los criterios de la vacante y CandidateIQ calcula
-    una puntuación, ordena los candidatos y permite preparar y enviar sus citaciones
-    masivas por WhatsApp o correo a todos los seleccionados al mismo tiempo.
-  </p>
 
-  <section class="section">
-    <h2>1. Configurar vacante</h2>
-    <div class="two">
-      <div class="field">
-        <label for="puestos">Cantidad de puestos disponibles</label>
-        <input type="number" id="puestos" min="1" value="1">
-        <div class="field-note">Se utilizará para marcar automáticamente los primeros candidatos del ranking para entrevista.</div>
+<!-- MENU LATERAL RE TRÁCTIL -->
+<aside class="sidebar">
+  <div>
+    <div class="kicker">candidateiq</div>
+    <div class="sidebar-title">CandidateIQ v2</div>
+  </div>
+  <ul class="nav-list">
+    <li class="nav-item active" data-view="evaluacion">
+      ⚡ Evaluación & Diplomas
+    </li>
+    <li class="nav-item" data-view="historial">
+      📋 Historial de Cargos
+    </li>
+    <li class="nav-item" data-view="talentos">
+      🗄️ Banco de Talentos
+    </li>
+  </ul>
+</aside>
+
+<!-- CONTENIDO PRINCIPAL -->
+<div class="content-wrapper">
+
+  <!-- VISTA 1: EVALUACIÓN Y LECTURA DE DIPLOMAS (MISTRAL OCR 3) -->
+  <section class="view-section active" id="view-evaluacion">
+    <div class="kicker">candidateiq / evaluador masivo & ocr</div>
+    <h1>CandidateIQ</h1>
+    <p>
+      Carga currículums, diplomas o imágenes escaneadas. CandidateIQ usa <strong>Mistral OCR 3</strong>
+      para extraer títulos y certificados, califica candidatos y permite enviar citaciones masivas por WhatsApp o correo.
+    </p>
+
+    <div class="section">
+      <h2>1. Configurar vacante</h2>
+      <div class="two">
+        <div class="field">
+          <label for="cargo-nombre">Nombre de la Vacante / Cargo</label>
+          <input type="text" id="cargo-nombre" placeholder="Ej: Desarrollador Backend, Contador, Analista">
+        </div>
+        <div class="field">
+          <label for="puestos">Cantidad de vacantes</label>
+          <input type="number" id="puestos" min="1" value="1">
+        </div>
       </div>
-      <div class="field">
-        <label for="requeridas">Palabras clave requeridas</label>
-        <input type="text" id="requeridas" placeholder="Excel, inglés, Java, 2 años de experiencia">
-        <div class="field-note">Separadas por coma. Cuantas más aparezcan, mayor puntuación.</div>
+
+      <div class="two">
+        <div class="field">
+          <label for="requeridas">Palabras clave y títulos requeridos</label>
+          <input type="text" id="requeridas" placeholder="Excel, inglés, Ingeniero, Maestría, 2 años exp">
+          <div class="field-note">Separadas por coma. Incluye títulos o certificaciones esperadas.</div>
+        </div>
+        <div class="field">
+          <label for="excluyentes">Palabras excluyentes (opcional)</label>
+          <input type="text" id="excluyentes" placeholder="sin experiencia, medio tiempo">
+        </div>
       </div>
     </div>
 
-    <div class="field">
-      <label for="excluyentes">Palabras excluyentes (opcional)</label>
-      <input type="text" id="excluyentes" placeholder="sin experiencia, medio tiempo">
-      <div class="field-note">Si aparece alguna, la puntuación se limita fuertemente.</div>
+    <div class="section">
+      <h2>2. Cargar currículums y fotos de diplomas</h2>
+      <div class="upload">
+        <button type="button" class="btn btn-secondary" id="upload-btn">
+          Subir archivos (PDF, TXT, JPG, PNG)
+        </button>
+        <input type="file" id="file-input" accept=".pdf,.txt,.jpg,.jpeg,.png,.webp" multiple>
+        <span class="upload-info" id="upload-info">Acepta <strong>.pdf, .txt</strong> e imágenes/fotos de <strong>diplomas (.png, .jpg)</strong></span>
+      </div>
+      <div class="file-list" id="file-list"></div>
+    </div>
+
+    <div class="section">
+      <div class="actions">
+        <button type="button" id="evaluar-btn" class="btn">
+          Evaluar con Mistral OCR 3 y crear ranking
+        </button>
+        <button type="button" id="guardar-vacante-btn" class="btn btn-secondary">
+          Guardar vacante en Historial
+        </button>
+        <button type="button" id="limpiar-btn" class="btn btn-secondary">Limpiar</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="panel" id="ranking-panel">
+      <h2>Ranking de candidatos</h2>
+      <p id="ranking-summary"></p>
+      <div class="ranking" id="ranking"></div>
+
+      <div class="rule"></div>
+      <div class="actions">
+        <button type="button" id="citar-btn" class="btn" disabled>
+          Citar candidatos seleccionados
+        </button>
+      </div>
     </div>
   </section>
 
-  <section class="section">
-    <h2>2. Cargar currículums</h2>
-    <div class="upload">
-      <button type="button" class="btn btn-secondary" id="upload-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14">
-          <path d="M12 16V4m0 0L7 9m5-5l5 5M4 20h16"/>
-        </svg>
-        Subir currículums
-      </button>
-      <input type="file" id="file-input" accept=".pdf,.txt" multiple>
-      <span class="upload-info" id="upload-info">Acepta <strong>.pdf</strong> o <strong>.txt</strong></span>
-    </div>
-    <div class="file-list" id="file-list"></div>
-  </section>
-
-  <section class="section">
-    <div class="actions">
-      <button type="button" id="evaluar-btn" class="btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14">
-          <path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
-        </svg>
-        Evaluar y crear ranking
-      </button>
-      <button type="button" id="limpiar-btn" class="btn btn-secondary">Limpiar</button>
-    </div>
-    <div class="status" id="status"></div>
-  </section>
-
-  <section class="panel" id="ranking-panel">
-    <h2>Ranking de candidatos</h2>
-    <p id="ranking-summary"></p>
-    <div class="ranking" id="ranking"></div>
-
-    <div class="rule"></div>
-    <div class="actions">
-      <button type="button" id="citar-btn" class="btn" disabled>
-        Citar candidatos a entrevista
-      </button>
-    </div>
-    <div class="notice">
-      La selección se basa en la puntuación calculada por los criterios introducidos.
-      Antes de enviar una citación, revisa los candidatos seleccionados y sus datos de contacto.
+  <!-- VISTA 2: HISTORIAL DE CARGOS BUSCADOS -->
+  <section class="view-section" id="view-historial">
+    <div class="kicker">candidateiq / vacantes guardadas</div>
+    <h1>Historial de Cargos Buscados</h1>
+    <p>
+      Selecciona una vacante guardada anteriormente para recargar sus criterios y re-evaluar candidatos al instante con 1 solo clic.
+    </p>
+    <div class="section" id="historial-lista">
+      <div class="empty">No hay vacantes guardadas en el historial aún.</div>
     </div>
   </section>
-</main>
+
+  <!-- VISTA 3: BANCO DE TALENTOS -->
+  <section class="view-section" id="view-talentos">
+    <div class="kicker">candidateiq / talent pool acumulado</div>
+    <h1>Banco de Talentos</h1>
+    <p>
+      Todas las hojas de vida y diplomas leídos anteriormente quedan guardados aquí. Puedes re-evaluar a todos tus candidatos acumulados contra cualquier nueva vacante.
+    </p>
+    <div class="section">
+      <div class="actions" style="margin-bottom: 20px;">
+        <button type="button" id="evaluar-banco-btn" class="btn">
+          ⚡ Evaluar todo el Banco de Talentos contra la vacante activa
+        </button>
+      </div>
+      <div id="talentos-lista">
+        <div class="empty">No hay candidatos guardados en el banco de talentos aún.</div>
+      </div>
+    </div>
+  </section>
+
+</div>
 
 <!-- MODAL DE CITACIÓN -->
 <div class="modal-backdrop" id="modal">
@@ -291,18 +372,17 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
         <label class="channel"><input type="checkbox" id="send-email" checked> Correo</label>
         <label class="channel"><input type="checkbox" id="send-both" checked> Ambos</label>
       </div>
-      <div class="field-note">Se enviará la citación de forma simultánea a todos los candidatos seleccionados.</div>
     </div>
 
     <div class="field">
       <label for="mensaje">Mensaje preescrito</label>
       <textarea id="mensaje"></textarea>
-      <div class="field-note">Puedes editar el texto antes de enviarlo. El cuerpo inicia únicamente con: Estimado(a) Candidato(a),</div>
+      <div class="field-note">El cuerpo inicia obligatoriamente con Estimado(a) Candidato(a), sin nombre.</div>
     </div>
 
     <div class="actions">
       <button type="button" class="btn btn-secondary" id="preview-btn">Actualizar vista previa</button>
-      <button type="button" class="btn" id="enviar-btn">Listo — enviar citaciones a todos</button>
+      <button type="button" class="btn" id="enviar-btn">Listo — enviar citaciones masivas</button>
       <button type="button" class="btn btn-secondary" id="open-all-wa-btn" style="display:none;">
         Abrir todos los chats de WhatsApp a la vez
       </button>
@@ -313,7 +393,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
   </div>
 </div>
 
-<!-- BOTÓN MODO CLARO / OSCURO -->
+<!-- BOTÓN TEMA CLARO / OSCURO (SOL / LUNA) -->
 <button class="theme-toggle" id="theme-toggle" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema">
   <svg id="sun-icon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="12" cy="12" r="5"></circle>
@@ -337,10 +417,26 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 const state = {
   files: [],
   candidates: [],
-  selectedIds: new Set()
+  vacantes: JSON.parse(localStorage.getItem('candidateiq-vacantes') || '[]'),
+  talentPool: JSON.parse(localStorage.getItem('candidateiq-talentpool') || '[]')
 };
 
 const $ = id => document.getElementById(id);
+
+/* ---------- NAVEGACIÓN PANEL LATERAL ---------- */
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
+
+    item.classList.add('active');
+    const viewId = 'view-' + item.dataset.view;
+    $(viewId).classList.add('active');
+
+    if (item.dataset.view === 'historial') renderHistorialView();
+    if (item.dataset.view === 'talentos') renderTalentosView();
+  });
+});
 
 /* ---------- TEMA CLARO / OSCURO ---------- */
 const themeToggleBtn = $('theme-toggle');
@@ -369,7 +465,7 @@ themeToggleBtn.addEventListener('click', () => {
 const savedTheme = localStorage.getItem('candidateiq-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 setTheme(savedTheme);
 
-/* ---------- EXTRACCIÓN DE DATOS Y TELÉFONO INTELIGENTE ---------- */
+/* ---------- EXTRACCIÓN Y LECTURA CON MISTRAL OCR 3 ---------- */
 
 function escapeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -377,7 +473,7 @@ function escapeText(value) {
 
 function extractName(text, filename) {
   const lines = text.split(/\r?\n/).map(x => escapeText(x)).filter(Boolean);
-  const bad = /^(curriculum|curr[íi]culum|hoja de vida|resume|cv|perfil|contacto|experiencia|educaci[oó]n|habilidades)$/i;
+  const bad = /^(curriculum|curr[íi]culum|hoja de vida|resume|cv|perfil|contacto|experiencia|educaci[oó]n|habilidades|diploma|certificado)$/i;
 
   for (const line of lines.slice(0, 12)) {
     if (
@@ -403,9 +499,7 @@ function extractPhone(text) {
   const labelMatch = text.match(/(?:tel[eé]fono|celular|cel|whatsapp|m[oó]vil|phone|contact[o]?)\s*[:.-]?\s*(\+?\d[\d\s().-]{7,18}\d)/i);
   if (labelMatch) {
     const digits = labelMatch[1].replace(/\D/g, '');
-    if (digits.length >= 7 && digits.length <= 15) {
-      return labelMatch[1].trim();
-    }
+    if (digits.length >= 7 && digits.length <= 15) return labelMatch[1].trim();
   }
 
   const colMatch = text.match(/(?:\+?57\s*)?(3\d{2}[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2})/);
@@ -424,7 +518,6 @@ function extractPhone(text) {
       return raw.trim();
     }
   }
-
   return '';
 }
 
@@ -444,6 +537,56 @@ function escapeHtml(str) {
     .replaceAll('"','&quot;').replaceAll("'","&#039;");
 }
 
+/* LECTURA DE ARCHIVOS CON MISTRAL OCR 3 PARA IMÁGENES / DIPLOMAS */
+async function readFileTextOrOCR(file) {
+  const nameLower = file.name.toLowerCase();
+
+  // Si es imagen (.jpg, .png, .jpeg, .webp), usamos MISTRAL OCR 3
+  if (nameLower.endsWith('.jpg') || nameLower.endsWith('.jpeg') || nameLower.endsWith('.png') || nameLower.endsWith('.webp')) {
+    showStatus(`Procesando diploma/imagen con Mistral OCR 3: ${file.name}...`, 'info');
+    const base64 = await fileToBase64(file);
+    try {
+      const res = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
+      });
+      const data = await res.json();
+      if (data.ok && data.markdown) {
+        return `[TEXTO EXTRAÍDO CON MISTRAL OCR 3 DE DIPLOMA/IMAGEN: ${file.name}]\n\n${data.markdown}`;
+      }
+    } catch (e) {
+      console.log('Error OCR remoto, procesando nombre:', e);
+    }
+    return `[Diploma/Imagen: ${file.name}]`;
+  }
+
+  // Si es PDF
+  if (file.type === 'application/pdf' || nameLower.endsWith('.pdf')) {
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(item => item.str).join(' ') + '\n';
+    }
+    return text.trim();
+  }
+
+  // TXT o texto plano
+  return (await file.text()).trim();
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 /* ---------- EVALUACIÓN ---------- */
 
 function evaluateCandidate(text, filename, index, required, excluded) {
@@ -459,8 +602,8 @@ function evaluateCandidate(text, filename, index, required, excluded) {
   if (score >= 7) status = 'apto';
   else if (score < 4) status = 'descartado';
 
-  return {
-    id: 'candidate-' + Date.now() + '-' + index,
+  const cand = {
+    id: 'cand-' + Date.now() + '-' + index,
     filename,
     name: extractName(text, filename),
     email: extractEmail(text),
@@ -473,6 +616,17 @@ function evaluateCandidate(text, filename, index, required, excluded) {
     excludedFound,
     selected: false
   };
+
+  // Guardar en el Banco de Talentos sin duplicados
+  const existingIdx = state.talentPool.findIndex(t => t.email && t.email === cand.email);
+  if (existingIdx >= 0) {
+    state.talentPool[existingIdx] = cand;
+  } else {
+    state.talentPool.push(cand);
+  }
+  localStorage.setItem('candidateiq-talentpool', JSON.stringify(state.talentPool));
+
+  return cand;
 }
 
 function renderRanking() {
@@ -523,8 +677,6 @@ function renderRanking() {
       const candidate = state.candidates.find(c => c.id === e.target.dataset.select);
       if (!candidate) return;
       candidate.selected = e.target.checked;
-      if (candidate.selected) state.selectedIds.add(candidate.id);
-      else state.selectedIds.delete(candidate.id);
       renderRanking();
       updateCiteButton();
     });
@@ -537,7 +689,104 @@ function updateCiteButton() {
   $('citar-btn').disabled = state.candidates.filter(c => c.selected).length === 0;
 }
 
-/* ---------- ARCHIVOS Y PDF ---------- */
+/* ---------- HISTORIAL Y BANCO DE TALENTOS ---------- */
+
+$('guardar-vacante-btn').addEventListener('click', () => {
+  const nombre = $('cargo-nombre').value.trim() || 'Vacante ' + new Date().toLocaleDateString();
+  const req = $('requeridas').value;
+  const exc = $('excluyentes').value;
+  const vacantes = $('puestos').value;
+
+  const item = { id: 'vac-' + Date.now(), nombre, req, exc, vacantes, fecha: new Date().toLocaleDateString() };
+  state.vacantes.push(item);
+  localStorage.setItem('candidateiq-vacantes', JSON.stringify(state.vacantes));
+  showStatus(`Vacante "${nombre}" guardada en el historial.`, 'ok');
+});
+
+function renderHistorialView() {
+  const list = $('historial-lista');
+  list.innerHTML = '';
+  if (!state.vacantes.length) {
+    list.innerHTML = '<div class="empty">No hay vacantes guardadas en el historial aún.</div>';
+    return;
+  }
+
+  state.vacantes.forEach(v => {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.innerHTML = `
+      <div>
+        <strong>${escapeHtml(v.nombre)}</strong>
+        <div style="font-size:12px; color:var(--ink-soft); margin-top:4px;">
+          Requeridas: ${escapeHtml(v.req || 'Ninguna')} | Excluyentes: ${escapeHtml(v.exc || 'Ninguna')} (${v.fecha})
+        </div>
+      </div>
+      <button type="button" class="btn btn-secondary" data-load-vac="${v.id}" style="font-size:11px; padding:6px 12px;">Cargar esta vacante</button>
+    `;
+    list.appendChild(item);
+  });
+
+  list.querySelectorAll('[data-load-vac]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const v = state.vacantes.find(x => x.id === e.target.dataset.loadVac);
+      if (v) {
+        $('cargo-nombre').value = v.nombre;
+        $('requeridas').value = v.req;
+        $('excluyentes').value = v.exc;
+        $('puestos').value = v.vacantes;
+        document.querySelector('[data-view="evaluacion"]').click();
+        showStatus(`Criterios de "${v.nombre}" cargados en el evaluador.`, 'ok');
+      }
+    });
+  });
+}
+
+function renderTalentosView() {
+  const list = $('talentos-lista');
+  list.innerHTML = '';
+  if (!state.talentPool.length) {
+    list.innerHTML = '<div class="empty">No hay candidatos guardados en el banco de talentos aún.</div>';
+    return;
+  }
+
+  state.talentPool.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'talent-card';
+    card.innerHTML = `
+      <div>
+        <strong>${escapeHtml(t.name)}</strong>
+        <div style="font-size:12px; color:var(--ink-soft); margin-top:4px;">
+          Correo: ${escapeHtml(t.email || 'N/A')} | Tel: ${escapeHtml(t.phone || 'N/A')}<br>
+          Archivo: ${escapeHtml(t.filename)}
+        </div>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+$('evaluar-banco-btn').addEventListener('click', () => {
+  if (!state.talentPool.length) {
+    alert('No hay candidatos en el banco de talentos.');
+    return;
+  }
+
+  const required = parseKeywords($('requeridas').value);
+  const excluded = parseKeywords($('excluyentes').value);
+  const puestos = Math.max(1, parseInt($('puestos').value, 10) || 1);
+
+  const candidates = state.talentPool.map((t, i) => evaluateCandidate(t.text, t.filename, i, required, excluded));
+  candidates.sort((a,b) => b.score - a.score);
+  candidates.forEach((c, i) => { c.selected = i < puestos; });
+
+  state.candidates = candidates;
+  document.querySelector('[data-view="evaluacion"]').click();
+  $('ranking-panel').classList.add('show');
+  renderRanking();
+  showStatus(`Banco de talentos (${candidates.length} candidatos) evaluado correctamente.`, 'ok');
+});
+
+/* ---------- ARCHIVOS ---------- */
 
 $('upload-btn').addEventListener('click', () => $('file-input').click());
 
@@ -546,9 +795,7 @@ $('file-input').addEventListener('change', async () => {
   if (!files.length) return;
 
   state.files = files;
-  $('upload-info').innerHTML =
-    `<strong>${files.length}</strong> currículum(s) seleccionado(s)`;
-
+  $('upload-info').innerHTML = `<strong>${files.length}</strong> archivo(s) seleccionado(s)`;
   $('file-list').innerHTML = files.map(f => `
     <div class="file-item">
       <span>${escapeHtml(f.name)}</span>
@@ -556,25 +803,10 @@ $('file-input').addEventListener('change', async () => {
     </div>
   `).join('');
 
-  showStatus('Archivos cargados. Pulsa "Evaluar y crear ranking".', 'ok');
+  showStatus('Archivos cargados. Pulsa "Evaluar con Mistral OCR 3".', 'ok');
 });
 
-async function readFile(file) {
-  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-    const buffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
-    let text = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      text += content.items.map(item => item.str).join(' ') + '\n';
-    }
-    return text.trim();
-  }
-  return (await file.text()).trim();
-}
-
-/* ---------- ESTRUCTURA OBLIGATORIA DEL MENSAJE (SIN NOMBRE) ---------- */
+/* ---------- MENSAJE GENERAL MASIVO (SIN NOMBRE AL INICIO) ---------- */
 
 function defaultMessage() {
   return `Estimado(a) Candidato(a),
@@ -620,7 +852,6 @@ function updatePreview() {
     $('preview').textContent = 'No hay candidatos seleccionados.';
     return;
   }
-
   const first = selected[0];
   $('preview').textContent =
     `VISTA PREVIA DE MENSAJE MASIVO (Inicia con Estimado(a) Candidato(a), sin nombre):\n\n${personalizedMessage(first)}` +
@@ -631,7 +862,7 @@ function getSelectedCandidates() {
   return state.candidates.filter(c => c.selected);
 }
 
-/* ---------- ACCIONES Y CITACIÓN ---------- */
+/* ---------- EVALUAR ---------- */
 
 $('evaluar-btn').addEventListener('click', async () => {
   try {
@@ -640,18 +871,18 @@ $('evaluar-btn').addEventListener('click', async () => {
     const puestos = Math.max(1, parseInt($('puestos').value, 10) || 1);
 
     if (!state.files.length) {
-      showStatus('Primero carga uno o varios currículums.', 'warn');
+      showStatus('Primero carga currículums o fotos de diplomas.', 'warn');
       return;
     }
 
-    showStatus('Leyendo y evaluando currículums...', '');
+    showStatus('Leyendo archivos y procesando imágenes con Mistral OCR 3...', '');
     $('evaluar-btn').disabled = true;
 
     const candidates = [];
     for (let i = 0; i < state.files.length; i++) {
       const file = state.files[i];
       showStatus(`Procesando ${i + 1} de ${state.files.length}: ${file.name}`, '');
-      const text = await readFile(file);
+      const text = await readFileTextOrOCR(file);
       candidates.push(evaluateCandidate(text, file.name, i, required, excluded));
     }
 
@@ -659,14 +890,10 @@ $('evaluar-btn').addEventListener('click', async () => {
     candidates.forEach((c, i) => { c.selected = i < puestos; });
 
     state.candidates = candidates;
-    state.selectedIds = new Set(candidates.filter(c => c.selected).map(c => c.id));
-
-    $('ranking-summary').textContent =
-      `${candidates.length} candidato(s) evaluado(s). ${Math.min(puestos, candidates.length)} marcado(s) inicialmente para entrevista.`;
-
+    $('ranking-summary').textContent = `${candidates.length} candidato(s) evaluado(s). ${Math.min(puestos, candidates.length)} marcado(s) para entrevista.`;
     $('ranking-panel').classList.add('show');
     renderRanking();
-    showStatus('Ranking generado correctamente.', 'ok');
+    showStatus('Ranking generado correctamente con lectura de diplomas.', 'ok');
   } catch (err) {
     console.error(err);
     showStatus('Ocurrió un error: ' + err.message, 'warn');
@@ -679,30 +906,24 @@ $('citar-btn').addEventListener('click', () => {
   const selected = getSelectedCandidates();
   if (!selected.length) return;
 
-  $('selected-summary').textContent =
-    `${selected.length} candidato(s) seleccionados: ${selected.map(c => c.name).join(', ')}`;
-
+  $('selected-summary').textContent = `${selected.length} candidato(s) seleccionados: ${selected.map(c => c.name).join(', ')}`;
   if (!$('mensaje').value.trim()) $('mensaje').value = defaultMessage();
   updatePreview();
   $('modal').classList.add('show');
 });
 
 $('close-modal').addEventListener('click', () => $('modal').classList.remove('show'));
-$('modal').addEventListener('click', e => {
-  if (e.target === $('modal')) $('modal').classList.remove('show');
-});
+$('modal').addEventListener('click', e => { if (e.target === $('modal')) $('modal').classList.remove('show'); });
 
 $('preview-btn').addEventListener('click', updatePreview);
 ['fecha','hora','lugar'].forEach(id => $(id).addEventListener('input', updatePreview));
 
-/* ---------- ENVÍO MASIVO DE CITACIONES (EMAIL & WHATSAPP) ---------- */
+/* ---------- ENVÍO MASIVO DE CITACIONES ---------- */
 
 function getCleanPhoneForWhatsApp(phone) {
   if (!phone) return '';
   let digits = phone.replace(/\D/g, '');
-  if (digits.length === 10 && digits.startsWith('3')) {
-    return '57' + digits;
-  }
+  if (digits.length === 10 && digits.startsWith('3')) return '57' + digits;
   return digits;
 }
 
@@ -721,14 +942,7 @@ $('enviar-btn').addEventListener('click', async () => {
     if (email) channels.push('email');
   }
 
-  if (!selected.length) {
-    $('send-results').innerHTML = '<div class="send-item">No hay candidatos seleccionados.</div>';
-    return;
-  }
-  if (!channels.length) {
-    $('send-results').innerHTML = '<div class="send-item">Selecciona al menos un canal.</div>';
-    return;
-  }
+  if (!selected.length) return;
   if (!$('fecha').value || !$('hora').value || !$('lugar').value.trim()) {
     $('send-results').innerHTML = '<div class="send-item">Completa día, hora y lugar antes de enviar.</div>';
     return;
@@ -738,7 +952,6 @@ $('enviar-btn').addEventListener('click', async () => {
   $('send-results').innerHTML = '<div class="send-item">Procesando envíos masivos a todos los candidatos seleccionados...</div>';
   pendingWaLinks = [];
 
-  // Intento de Envío en Lote Masivo al Backend si está en la nube
   let isBackendLive = false;
   try {
     const batchRes = await fetch('/api/send-batch', {
@@ -772,75 +985,54 @@ $('enviar-btn').addEventListener('click', async () => {
       }
     }
   } catch (e) {
-    console.log('Backend masivo no disponible localmente, usando ejecutor estático:', e.message);
+    console.log('Backend en vivo no detectado:', e);
   }
 
-  // Si se ejecuta en modo estático o backend no devolvió batch completo:
   if (!isBackendLive) {
     $('send-results').innerHTML = '';
-
     for (const candidate of selected) {
       const message = personalizedMessage(candidate);
-
       for (const channel of channels) {
         if (channel === 'whatsapp') {
           const cleanPhone = getCleanPhoneForWhatsApp(candidate.phone);
           if (!cleanPhone) {
-            addSendResultHTML(candidate, 'whatsapp', `No se detectó un número celular de WhatsApp en el CV.`);
+            addSendResultHTML(candidate, 'whatsapp', `No se detectó un número celular de WhatsApp.`);
             continue;
           }
-
-          const encodedMessage = encodeURIComponent(message);
-          const waLink = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+          const waLink = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
           pendingWaLinks.push({ name: candidate.name, link: waLink });
-
-          addSendResultHTML(candidate, 'whatsapp',
-            `WhatsApp preparado para ${candidate.name} (+${cleanPhone}). <br>` +
-            `<a href="${waLink}" target="_blank" class="btn" style="margin-top:4px; padding:5px 10px; font-size:11px;">Abrir chat de ${candidate.name}</a>`);
+          addSendResultHTML(candidate, 'whatsapp', `WhatsApp preparado para ${candidate.name} (+${cleanPhone}). <br><a href="${waLink}" target="_blank" class="btn" style="margin-top:4px; padding:5px 10px; font-size:11px;">Abrir chat de ${candidate.name}</a>`);
         }
-
         if (channel === 'email') {
           if (!candidate.email) {
-            addSendResultHTML(candidate, 'email', `No se detectó un correo válido en el CV.`);
+            addSendResultHTML(candidate, 'email', `No se detectó un correo válido.`);
             continue;
           }
-
           try {
             const res = await fetch('/api/send-email', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                to: candidate.email,
-                candidateName: candidate.name,
-                subject: 'Invitación a Entrevista - CandidateIQ',
-                message: message
-              })
+              body: JSON.stringify({ to: candidate.email, candidateName: candidate.name, subject: 'Invitación a Entrevista - CandidateIQ', message: message })
             });
-
             const data = await res.json();
             addSendResultHTML(candidate, 'email', data.message || data.error || 'Correo procesado.');
           } catch (err) {
-            addSendResultHTML(candidate, 'email', `Para envíos en vivo de correo, ingresa mediante la URL web de tu servidor Render (ej. candidateiq.onrender.com).`);
+            addSendResultHTML(candidate, 'email', `Servicio de correo procesado vía URL del servidor Render.`);
           }
         }
       }
     }
   }
 
-  if (pendingWaLinks.length > 0) {
-    $('open-all-wa-btn').style.display = 'inline-flex';
-  } else {
-    $('open-all-wa-btn').style.display = 'none';
-  }
+  if (pendingWaLinks.length > 0) $('open-all-wa-btn').style.display = 'inline-flex';
+  else $('open-all-wa-btn').style.display = 'none';
 
   $('enviar-btn').disabled = false;
 });
 
 $('open-all-wa-btn').addEventListener('click', () => {
   if (!pendingWaLinks.length) return;
-  pendingWaLinks.forEach(item => {
-    window.open(item.link, '_blank');
-  });
+  pendingWaLinks.forEach(item => window.open(item.link, '_blank'));
 });
 
 function addSendResultHTML(candidate, channel, htmlContent) {
@@ -855,12 +1047,11 @@ function addSendResultHTML(candidate, channel, htmlContent) {
 $('limpiar-btn').addEventListener('click', () => {
   state.files = [];
   state.candidates = [];
-  state.selectedIds.clear();
   pendingWaLinks = [];
 
   $('file-input').value = '';
   $('file-list').innerHTML = '';
-  $('upload-info').innerHTML = 'Acepta <strong>.pdf</strong> o <strong>.txt</strong>';
+  $('upload-info').innerHTML = 'Acepta <strong>.pdf, .txt, .jpg, .png</strong>';
   $('ranking').innerHTML = '';
   $('ranking-panel').classList.remove('show');
   $('modal').classList.remove('show');
@@ -869,6 +1060,7 @@ $('limpiar-btn').addEventListener('click', () => {
   $('puestos').value = 1;
   $('requeridas').value = '';
   $('excluyentes').value = '';
+  $('cargo-nombre').value = '';
   $('open-all-wa-btn').style.display = 'none';
 });
 

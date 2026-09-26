@@ -9,8 +9,72 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '25mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// -------------------------------------------------------------
+// HELPER: MISTRAL OCR 3 API (MODEL: MISTRAL-OCR-LATEST)
+// -------------------------------------------------------------
+async function processMistralOCR({ imageBase64, mimeType = 'image/jpeg' }) {
+  const apiKey = process.env.MISTRAL_API_KEY;
+  if (!apiKey) return null;
+
+  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:${mimeType};base64,${imageBase64}`;
+
+  const response = await fetch('https://api.mistral.ai/v1/ocr', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'mistral-ocr-latest',
+      document: {
+        type: 'image_url',
+        image_url: dataUrl
+      }
+    })
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Error procesando documento con Mistral OCR API');
+  }
+  return data;
+}
+
+// -------------------------------------------------------------
+// ENDPOINT API: PROCESAR DIPLOMAS / DOCUMENTOS CON MISTRAL OCR
+// -------------------------------------------------------------
+app.post('/api/ocr', async (req, res) => {
+  try {
+    const { imageBase64, mimeType } = req.body;
+
+    if (!imageBase64) {
+      return res.status(400).json({ ok: false, error: 'Se requiere la imagen en Base64.' });
+    }
+
+    if (process.env.MISTRAL_API_KEY) {
+      const ocrResult = await processMistralOCR({ imageBase64, mimeType });
+      const extractedMarkdown = ocrResult.pages ? ocrResult.pages.map(p => p.markdown).join('\n\n') : JSON.stringify(ocrResult);
+      return res.json({ ok: true, source: 'mistral-ocr-latest', markdown: extractedMarkdown, raw: ocrResult });
+    } else {
+      // Simulación de OCR para pruebas sin API Key configurada
+      return res.json({
+        ok: true,
+        simulated: true,
+        source: 'local-ocr-simulation',
+        markdown: `[Extracto de Diploma/Documento Escaneado]
+Título: Profesional Universitario / Diplomado
+Estado: Verificado
+Nota: Configura MISTRAL_API_KEY en Render para escaneo automático con Mistral OCR 3.`
+      });
+    }
+  } catch (error) {
+    console.error('Error en OCR:', error);
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
 
 // -------------------------------------------------------------
 // HELPER: ENVÍO DE CORREO VÍA BREVO API
@@ -95,7 +159,7 @@ function getEmailTransporter() {
 }
 
 // -------------------------------------------------------------
-// HELPER: ENVÍO AUTOMÁTICO DE WHATSAPP VÍA GREEN API (EN SEGUNDO PLANO)
+// HELPER: ENVÍO AUTOMÁTICO DE WHATSAPP VÍA GREEN API
 // -------------------------------------------------------------
 async function sendWhatsAppGreenAPI({ phone, message }) {
   const instanceId = process.env.GREEN_API_INSTANCE;
@@ -199,7 +263,7 @@ app.post('/api/send-email', async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// ENDPOINT API: ENVIAR WHATSAPP INDIVIDUAL (GREEN API > TWILIO > SIMULACIÓN)
+// ENDPOINT API: ENVIAR WHATSAPP INDIVIDUAL
 // -------------------------------------------------------------
 app.post('/api/send-whatsapp', async (req, res) => {
   try {
@@ -214,13 +278,11 @@ app.post('/api/send-whatsapp', async (req, res) => {
       finalMessage = `Estimado(a) Candidato(a),\n\n${finalMessage}`;
     }
 
-    // 1. Intentar envío automático en segundo plano vía Green API
     if (process.env.GREEN_API_INSTANCE && process.env.GREEN_API_TOKEN) {
       const greenResult = await sendWhatsAppGreenAPI({ phone, message: finalMessage });
       return res.json({ ok: true, message: 'Mensaje de WhatsApp enviado 100% automático vía Green API.', idMessage: greenResult.idMessage });
     }
 
-    // 2. Intentar vía Twilio API
     const client = getTwilioClient();
     if (client) {
       let cleanPhone = phone.replace(/[^\d+]/g, '');
@@ -238,11 +300,10 @@ app.post('/api/send-whatsapp', async (req, res) => {
       return res.json({ ok: true, message: 'Mensaje de WhatsApp enviado vía Twilio API.', sid: response.sid });
     }
 
-    // 3. Simulación con enlace directo si no hay API de WhatsApp en Render
     return res.json({
       ok: true,
       simulated: true,
-      message: `WhatsApp preparado para ${phone}. Configura GREEN_API_INSTANCE en Render para envíos 100% automáticos en segundo plano.`
+      message: `WhatsApp preparado para ${phone}.`
     });
 
   } catch (error) {
@@ -272,7 +333,7 @@ app.post('/api/send-batch', async (req, res) => {
         finalMessage = `Estimado(a) Candidato(a),\n\n${finalMessage}`;
       }
 
-      // Email Dispatch
+      // Email
       if (channels.includes('email') && candidate.email) {
         const emailSubject = subject || 'Invitación a Entrevista - CandidateIQ';
         const htmlBody = `<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
@@ -300,12 +361,12 @@ app.post('/api/send-batch', async (req, res) => {
         }
       }
 
-      // WhatsApp Dispatch
+      // WhatsApp
       if (channels.includes('whatsapp') && candidate.phone) {
         try {
           if (process.env.GREEN_API_INSTANCE && process.env.GREEN_API_TOKEN) {
             await sendWhatsAppGreenAPI({ phone: candidate.phone, message: finalMessage });
-            candidateResult.dispatches.push({ channel: 'whatsapp', ok: true, message: 'WhatsApp enviado 100% automático vía Green API.' });
+            candidateResult.dispatches.push({ channel: 'whatsapp', ok: true, message: 'WhatsApp enviado vía Green API.' });
           } else {
             const client = getTwilioClient();
             if (client) {
@@ -419,23 +480,9 @@ app.post('/api/mcp', async (req, res) => {
       if (process.env.GREEN_API_INSTANCE && process.env.GREEN_API_TOKEN) {
         try {
           const greenResult = await sendWhatsAppGreenAPI({ phone, message: finalMessage });
-          return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `WhatsApp enviado 100% automático vía Green API (ID: ${greenResult.idMessage})` }] } });
+          return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `WhatsApp enviado vía Green API (ID: ${greenResult.idMessage})` }] } });
         } catch (e) {
           return res.json({ jsonrpc: '2.0', id, result: { isError: true, content: [{ type: 'text', text: `Error Green API: ${e.message}` }] } });
-        }
-      }
-
-      const client = getTwilioClient();
-      if (client) {
-        try {
-          const resp = await client.messages.create({
-            from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER || '+14155238886'}`,
-            to: `whatsapp:${phone}`,
-            body: finalMessage
-          });
-          return res.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `WhatsApp enviado con éxito. SID: ${resp.sid}` }] } });
-        } catch (e) {
-          return res.json({ jsonrpc: '2.0', id, result: { isError: true, content: [{ type: 'text', text: `Error enviando WhatsApp: ${e.message}` }] } });
         }
       }
 
@@ -454,7 +501,7 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`====================================================`);
-  console.log(`  CandidateIQ - Plataforma en Ejecución`);
+  console.log(`  CandidateIQ v2 (Soporte Mistral OCR 3 & Sidebar Menu)`);
   console.log(`  Servidor Web: http://localhost:${PORT}`);
   console.log(`  Endpoint MCP: http://localhost:${PORT}/api/mcp`);
   console.log(`====================================================`);
