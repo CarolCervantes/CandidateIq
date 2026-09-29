@@ -183,9 +183,9 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
   <div class="kicker">candidateiq / selección de candidatos</div>
   <h1>CandidateIQ</h1>
   <p>
-    Carga varios currículums, define los criterios de la vacante y CandidateIQ calcula
+    Carga varios currículums o diplomas, define los criterios de la vacante y CandidateIQ calcula
     una puntuación, ordena los candidatos y permite preparar y enviar sus citaciones
-    masivas por WhatsApp o correo a todos los seleccionados al mismo tiempo.
+    masivas por correo electrónico a todos los seleccionados al mismo tiempo.
   </p>
 
   <section class="section">
@@ -211,16 +211,16 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
   </section>
 
   <section class="section">
-    <h2>2. Cargar currículums</h2>
+    <h2>2. Cargar currículums y documentos</h2>
     <div class="upload">
       <button type="button" class="btn btn-secondary" id="upload-btn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14">
           <path d="M12 16V4m0 0L7 9m5-5l5 5M4 20h16"/>
         </svg>
-        Subir currículums
+        Subir currículums y archivos
       </button>
-      <input type="file" id="file-input" accept=".pdf,.txt" multiple>
-      <span class="upload-info" id="upload-info">Acepta <strong>.pdf</strong> o <strong>.txt</strong></span>
+      <input type="file" id="file-input" accept=".pdf,.txt,.png,.jpg,.jpeg" multiple>
+      <span class="upload-info" id="upload-info">Acepta <strong>.pdf</strong>, <strong>.txt</strong> o imágenes (diplomas/certificados)</span>
     </div>
     <div class="file-list" id="file-list"></div>
   </section>
@@ -286,12 +286,9 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 
     <div class="field">
       <label>Canal de envío masivo</label>
-      <div class="channel-grid">
-        <label class="channel"><input type="checkbox" id="send-whatsapp" checked> WhatsApp</label>
-        <label class="channel"><input type="checkbox" id="send-email" checked> Correo</label>
-        <label class="channel"><input type="checkbox" id="send-both" checked> Ambos</label>
+      <div class="field-note" style="background: var(--card); padding: 12px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); font-weight: 500;">
+        Las citaciones se enviarán de forma 100% automática por <strong>Correo Electrónico</strong> a todos los candidatos seleccionados.
       </div>
-      <div class="field-note">Se enviará la citación de forma simultánea a todos los candidatos seleccionados.</div>
     </div>
 
     <div class="field">
@@ -302,10 +299,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 
     <div class="actions">
       <button type="button" class="btn btn-secondary" id="preview-btn">Actualizar vista previa</button>
-      <button type="button" class="btn" id="enviar-btn">Listo — enviar citaciones a todos</button>
-      <button type="button" class="btn btn-secondary" id="open-all-wa-btn" style="display:none;">
-        Abrir todos los chats de WhatsApp a la vez
-      </button>
+      <button type="button" class="btn" id="enviar-btn">Listo — enviar citaciones por correo</button>
     </div>
 
     <div class="preview" id="preview"></div>
@@ -559,7 +553,32 @@ $('file-input').addEventListener('change', async () => {
   showStatus('Archivos cargados. Pulsa "Evaluar y crear ranking".', 'ok');
 });
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+  });
+}
+
 async function readFile(file) {
+  const isImage = file.type.startsWith('image/') || /\.(png|jpg|jpeg)$/i.test(file.name);
+  if (isImage) {
+    try {
+      const base64 = await fileToBase64(file);
+      const res = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mimeType: file.type || 'image/jpeg' })
+      });
+      const data = await res.json();
+      if (data.ok && data.markdown) return data.markdown;
+    } catch (e) {
+      console.warn('Error en Mistral OCR:', e);
+    }
+  }
+
   if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
@@ -569,7 +588,21 @@ async function readFile(file) {
       const content = await page.getTextContent();
       text += content.items.map(item => item.str).join(' ') + '\n';
     }
-    return text.trim();
+    if (text.trim().length > 20) return text.trim();
+
+    // Si el PDF tiene poco o ningún texto (documento escaneado / diploma en PDF), usar Mistral OCR
+    try {
+      const base64 = await fileToBase64(file);
+      const res = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mimeType: 'application/pdf' })
+      });
+      const data = await res.json();
+      if (data.ok && data.markdown) return data.markdown;
+    } catch (e) {
+      console.warn('Error en Mistral OCR para PDF:', e);
+    }
   }
   return (await file.text()).trim();
 }
@@ -623,8 +656,8 @@ function updatePreview() {
 
   const first = selected[0];
   $('preview').textContent =
-    `VISTA PREVIA DE MENSAJE MASIVO (Inicia con Estimado(a) Candidato(a), sin nombre):\n\n${personalizedMessage(first)}` +
-    (selected.length > 1 ? `\n\n+ Se enviará automáticamente a los ${selected.length} candidatos seleccionados al mismo tiempo.` : '');
+    `VISTA PREVIA DE CORREO MASIVO (Inicia con Estimado(a) Candidato(a), sin nombre):\n\n${personalizedMessage(first)}` +
+    (selected.length > 1 ? `\n\n+ Se enviará automáticamente por correo a los ${selected.length} candidatos seleccionados al mismo tiempo.` : '');
 }
 
 function getSelectedCandidates() {
@@ -640,11 +673,11 @@ $('evaluar-btn').addEventListener('click', async () => {
     const puestos = Math.max(1, parseInt($('puestos').value, 10) || 1);
 
     if (!state.files.length) {
-      showStatus('Primero carga uno o varios currículums.', 'warn');
+      showStatus('Primero carga uno o varios currículums o diplomas.', 'warn');
       return;
     }
 
-    showStatus('Leyendo y evaluando currículums...', '');
+    showStatus('Leyendo y evaluando documentos...', '');
     $('evaluar-btn').disabled = true;
 
     const candidates = [];
@@ -695,38 +728,13 @@ $('modal').addEventListener('click', e => {
 $('preview-btn').addEventListener('click', updatePreview);
 ['fecha','hora','lugar'].forEach(id => $(id).addEventListener('input', updatePreview));
 
-/* ---------- ENVÍO MASIVO DE CITACIONES (EMAIL & WHATSAPP) ---------- */
-
-function getCleanPhoneForWhatsApp(phone) {
-  if (!phone) return '';
-  let digits = phone.replace(/\D/g, '');
-  if (digits.length === 10 && digits.startsWith('3')) {
-    return '57' + digits;
-  }
-  return digits;
-}
-
-let pendingWaLinks = [];
+/* ---------- ENVÍO MASIVO DE CITACIONES (100% CORREO ELECTRÓNICO) ---------- */
 
 $('enviar-btn').addEventListener('click', async () => {
   const selected = getSelectedCandidates();
-  const whatsapp = $('send-whatsapp').checked;
-  const email = $('send-email').checked;
-  const both = $('send-both').checked;
-
-  let channels = [];
-  if (both) channels = ['whatsapp','email'];
-  else {
-    if (whatsapp) channels.push('whatsapp');
-    if (email) channels.push('email');
-  }
 
   if (!selected.length) {
     $('send-results').innerHTML = '<div class="send-item">No hay candidatos seleccionados.</div>';
-    return;
-  }
-  if (!channels.length) {
-    $('send-results').innerHTML = '<div class="send-item">Selecciona al menos un canal.</div>';
     return;
   }
   if (!$('fecha').value || !$('hora').value || !$('lugar').value.trim()) {
@@ -735,10 +743,8 @@ $('enviar-btn').addEventListener('click', async () => {
   }
 
   $('enviar-btn').disabled = true;
-  $('send-results').innerHTML = '<div class="send-item">Procesando envíos masivos a todos los candidatos seleccionados...</div>';
-  pendingWaLinks = [];
+  $('send-results').innerHTML = '<div class="send-item">Enviando correos automáticamente a todos los candidatos seleccionados...</div>';
 
-  // Intento de Envío en Lote Masivo al Backend si está en la nube
   let isBackendLive = false;
   try {
     const batchRes = await fetch('/api/send-batch', {
@@ -746,7 +752,7 @@ $('enviar-btn').addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         candidates: selected.map(c => ({ name: c.name, email: c.email, phone: c.phone })),
-        channels: channels,
+        channels: ['email'],
         subject: 'Invitación a Entrevista - CandidateIQ',
         message: personalizedMessage(selected[0])
       })
@@ -759,88 +765,46 @@ $('enviar-btn').addEventListener('click', async () => {
         $('send-results').innerHTML = '';
         for (const resItem of batchData.results) {
           for (const disp of resItem.dispatches) {
-            if (disp.channel === 'whatsapp' && disp.simulated) {
-              const cleanP = getCleanPhoneForWhatsApp(resItem.phone);
-              const link = `https://wa.me/${cleanP}?text=${encodeURIComponent(personalizedMessage({name: resItem.name}))}`;
-              pendingWaLinks.push({ name: resItem.name, link });
-              addSendResultHTML(resItem, 'whatsapp', `WhatsApp preparado para ${resItem.name} (+${cleanP}). <a href="${link}" target="_blank" class="btn" style="padding:4px 8px; font-size:11px;">Abrir Chat</a>`);
-            } else {
-              addSendResultHTML(resItem, disp.channel, disp.message || (disp.ok ? 'Enviado exitosamente.' : 'Error'));
-            }
+            addSendResultHTML(resItem, 'correo', disp.message || (disp.ok ? 'Correo enviado exitosamente.' : 'Error'));
           }
         }
       }
     }
   } catch (e) {
-    console.log('Backend masivo no disponible localmente, usando ejecutor estático:', e.message);
+    console.log('Backend masivo no disponible localmente:', e.message);
   }
 
-  // Si se ejecuta en modo estático o backend no devolvió batch completo:
   if (!isBackendLive) {
     $('send-results').innerHTML = '';
 
     for (const candidate of selected) {
       const message = personalizedMessage(candidate);
+      if (!candidate.email) {
+        addSendResultHTML(candidate, 'correo', `No se detectó un correo válido en el CV.`);
+        continue;
+      }
 
-      for (const channel of channels) {
-        if (channel === 'whatsapp') {
-          const cleanPhone = getCleanPhoneForWhatsApp(candidate.phone);
-          if (!cleanPhone) {
-            addSendResultHTML(candidate, 'whatsapp', `No se detectó un número celular de WhatsApp en el CV.`);
-            continue;
-          }
+      try {
+        const res = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: candidate.email,
+            candidateName: candidate.name,
+            subject: 'Invitación a Entrevista - CandidateIQ',
+            message: message
+          })
+        });
 
-          const encodedMessage = encodeURIComponent(message);
-          const waLink = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
-          pendingWaLinks.push({ name: candidate.name, link: waLink });
-
-          addSendResultHTML(candidate, 'whatsapp',
-            `WhatsApp preparado para ${candidate.name} (+${cleanPhone}). <br>` +
-            `<a href="${waLink}" target="_blank" class="btn" style="margin-top:4px; padding:5px 10px; font-size:11px;">Abrir chat de ${candidate.name}</a>`);
-        }
-
-        if (channel === 'email') {
-          if (!candidate.email) {
-            addSendResultHTML(candidate, 'email', `No se detectó un correo válido en el CV.`);
-            continue;
-          }
-
-          try {
-            const res = await fetch('/api/send-email', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                to: candidate.email,
-                candidateName: candidate.name,
-                subject: 'Invitación a Entrevista - CandidateIQ',
-                message: message
-              })
-            });
-
-            const data = await res.json();
-            addSendResultHTML(candidate, 'email', data.message || data.error || 'Correo procesado.');
-          } catch (err) {
-            addSendResultHTML(candidate, 'email', `Para envíos en vivo de correo, ingresa mediante la URL web de tu servidor Render (ej. candidateiq.onrender.com).`);
-          }
-        }
+        const data = await res.json();
+        addSendResultHTML(candidate, 'correo', data.message || data.error || 'Correo procesado.');
+      } catch (err) {
+        addSendResultHTML(candidate, 'correo', `Para envíos en vivo de correo, ingresa mediante la URL web de tu servidor Render (ej. candidateiq.onrender.com).`);
       }
     }
   }
 
-  if (pendingWaLinks.length > 0) {
-    $('open-all-wa-btn').style.display = 'inline-flex';
-  } else {
-    $('open-all-wa-btn').style.display = 'none';
-  }
-
   $('enviar-btn').disabled = false;
-});
-
-$('open-all-wa-btn').addEventListener('click', () => {
-  if (!pendingWaLinks.length) return;
-  pendingWaLinks.forEach(item => {
-    window.open(item.link, '_blank');
-  });
 });
 
 function addSendResultHTML(candidate, channel, htmlContent) {
@@ -856,11 +820,10 @@ $('limpiar-btn').addEventListener('click', () => {
   state.files = [];
   state.candidates = [];
   state.selectedIds.clear();
-  pendingWaLinks = [];
 
   $('file-input').value = '';
   $('file-list').innerHTML = '';
-  $('upload-info').innerHTML = 'Acepta <strong>.pdf</strong> o <strong>.txt</strong>';
+  $('upload-info').innerHTML = 'Acepta <strong>.pdf</strong>, <strong>.txt</strong> o imágenes (diplomas/certificados)';
   $('ranking').innerHTML = '';
   $('ranking-panel').classList.remove('show');
   $('modal').classList.remove('show');
@@ -869,7 +832,6 @@ $('limpiar-btn').addEventListener('click', () => {
   $('puestos').value = 1;
   $('requeridas').value = '';
   $('excluyentes').value = '';
-  $('open-all-wa-btn').style.display = 'none';
 });
 
 /* PDF.js Worker */

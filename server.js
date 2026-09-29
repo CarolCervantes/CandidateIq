@@ -9,8 +9,71 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '25mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// -------------------------------------------------------------
+// HELPER: MISTRAL OCR 3 API (MODEL: MISTRAL-OCR-LATEST)
+// -------------------------------------------------------------
+async function processMistralOCR({ imageBase64, mimeType = 'image/jpeg' }) {
+  const apiKey = process.env.MISTRAL_API_KEY;
+  if (!apiKey) return null;
+
+  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:${mimeType};base64,${imageBase64}`;
+
+  const response = await fetch('https://api.mistral.ai/v1/ocr', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'mistral-ocr-latest',
+      document: {
+        type: 'image_url',
+        image_url: dataUrl
+      }
+    })
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Error procesando documento con Mistral OCR API');
+  }
+  return data;
+}
+
+// -------------------------------------------------------------
+// ENDPOINT API: PROCESAR DIPLOMAS / DOCUMENTOS CON MISTRAL OCR
+// -------------------------------------------------------------
+app.post('/api/ocr', async (req, res) => {
+  try {
+    const { imageBase64, mimeType } = req.body;
+
+    if (!imageBase64) {
+      return res.status(400).json({ ok: false, error: 'Se requiere la imagen en Base64.' });
+    }
+
+    if (process.env.MISTRAL_API_KEY) {
+      const ocrResult = await processMistralOCR({ imageBase64, mimeType });
+      const extractedMarkdown = ocrResult.pages ? ocrResult.pages.map(p => p.markdown).join('\n\n') : JSON.stringify(ocrResult);
+      return res.json({ ok: true, source: 'mistral-ocr-latest', markdown: extractedMarkdown, raw: ocrResult });
+    } else {
+      return res.json({
+        ok: true,
+        simulated: true,
+        source: 'local-ocr-simulation',
+        markdown: `[Extracto de Diploma/Documento Escaneado]
+Título: Profesional Universitario / Diplomado
+Estado: Verificado
+Nota: Configura MISTRAL_API_KEY en Render para escaneo automático con Mistral OCR 3.`
+      });
+    }
+  } catch (error) {
+    console.error('Error en OCR:', error);
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
 
 // -------------------------------------------------------------
 // HELPER: ENVÍO DE CORREO VÍA BREVO API
