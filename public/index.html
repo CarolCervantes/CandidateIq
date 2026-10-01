@@ -183,7 +183,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
   <div class="kicker">candidateiq / selección de candidatos</div>
   <h1>CandidateIQ</h1>
   <p>
-    Carga varios currículums o diplomas, define los criterios de la vacante y CandidateIQ calcula
+    Carga varios currículums, define los criterios de la vacante y CandidateIQ calcula
     una puntuación, ordena los candidatos y permite preparar y enviar sus citaciones
     masivas por correo electrónico a todos los seleccionados al mismo tiempo.
   </p>
@@ -211,16 +211,16 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
   </section>
 
   <section class="section">
-    <h2>2. Cargar currículums y documentos</h2>
+    <h2>2. Cargar currículums y archivos</h2>
     <div class="upload">
       <button type="button" class="btn btn-secondary" id="upload-btn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14">
           <path d="M12 16V4m0 0L7 9m5-5l5 5M4 20h16"/>
         </svg>
-        Subir currículums y archivos
+        Subir currículums
       </button>
       <input type="file" id="file-input" accept=".pdf,.txt,.png,.jpg,.jpeg" multiple>
-      <span class="upload-info" id="upload-info">Acepta <strong>.pdf</strong>, <strong>.txt</strong> o imágenes (diplomas/certificados)</span>
+      <span class="upload-info" id="upload-info">Acepta <strong>.pdf</strong>, <strong>.txt</strong> o imágenes</span>
     </div>
     <div class="file-list" id="file-list"></div>
   </section>
@@ -673,7 +673,7 @@ $('evaluar-btn').addEventListener('click', async () => {
     const puestos = Math.max(1, parseInt($('puestos').value, 10) || 1);
 
     if (!state.files.length) {
-      showStatus('Primero carga uno o varios currículums o diplomas.', 'warn');
+      showStatus('Primero carga uno o varios currículums.', 'warn');
       return;
     }
 
@@ -823,7 +823,7 @@ $('limpiar-btn').addEventListener('click', () => {
 
   $('file-input').value = '';
   $('file-list').innerHTML = '';
-  $('upload-info').innerHTML = 'Acepta <strong>.pdf</strong>, <strong>.txt</strong> o imágenes (diplomas/certificados)';
+  $('upload-info').innerHTML = 'Acepta <strong>.pdf</strong>, <strong>.txt</strong> o imágenes';
   $('ranking').innerHTML = '';
   $('ranking-panel').classList.remove('show');
   $('modal').classList.remove('show');
