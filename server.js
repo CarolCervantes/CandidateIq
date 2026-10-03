@@ -105,9 +105,10 @@ ${supportTexts.length > 0 ? supportTexts.join('\n---\n').slice(0, 4000) : 'NO SE
 """
 
 REGLAS DE EVALUACIÓN Y VERIFICACIÓN CRUZADA:
-1. ALINEACIÓN DEL CARGO Y TITULACIÓN: Evalúa la idoneidad y competencias del candidato ESPECÍFICAMENTE para el cargo de "${jobTitle || 'Vacante General'}".
-   - Si la profesión del candidato (ej. Chef, Cocinero) no tiene relación alguna con la vacante solicitada (ej. Ingeniero de Sistemas, Contador), penaliza fuertemente su puntuación (asignando una puntuación máxima de 1 a 3/10) y marca estado "Descartado".
-   - Un candidato con perfil o título completamente incompatible NUNCA debe quedar en los primeros lugares del ranking.
+1. ALINEACIÓN DEL CARGO Y TITULACIÓN: Evalúa si la Hoja de Vida del candidato está ALINEADA CUALITATIVA Y TÉCNICAMENTE con el puesto de "${jobTitle || 'Vacante General'}".
+   - Compara el área profesional de la vacante (${jobTitle || 'Vacante'}) contra los títulos, estudios y experiencia demostrada en la Hoja de Vida.
+   - Si la profesión, formación o experiencia del candidato pertenece a un área o sector completamente diferente sin relación con la vacante (ej. Chef postulando a Sistemas, Abogado postulando a Contador, Médico postulando a Diseñador), penaliza fuertemente su puntuación (asignando de 1 a 3/10) y marca estado "Descartado".
+   - Un candidato con un perfil profesional no alineado con la vacante NUNCA debe quedar en los primeros lugares del ranking.
 2. COTEJO DE DIPLOMAS: Compara los estudios superiores o títulos declarados en la Hoja de Vida contra el texto de los Diplomas/Certificados adjuntos.
    - Si los diplomas respaldan exactamente los títulos afirmados (coinciden título e institución), asigna estado "Verificado".
    - Si afirma estudios pero faltan diplomas de respaldo, asigna estado "Parcial".
@@ -118,7 +119,7 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   "candidatoNombre": "Nombre Completo del Candidato",
   "candidatoTitulo": "Título Profesional o Profesión",
   "puntuacionIA": 9,
-  "resumenCualitativo": "Explicación detallada de la idoneidad y competencias reales del candidato para el cargo de ${jobTitle || 'Vacante'}...",
+  "resumenCualitativo": "Explicación detallada de la alineación del perfil con el cargo de ${jobTitle || 'Vacante'}...",
   "habilidadesReales": ["Habilidad 1", "Habilidad 2", "Habilidad 3"],
   "verificacionEstudios": {
     "estado": "Verificado" | "Parcial" | "Inconsistencia",
@@ -183,16 +184,25 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   const hasAcademicDoc = /diploma|certificado|acta|hace constar|otorgado|unicolombo|universidad|t[íi]tulo|registro de grado|folio|snies/i.test(supportCombined);
   const hasSupport = supportTexts.length > 0 || hasAcademicDoc;
 
-  // Verificación de compatibilidad de rol (ej. Chef vs Ingeniero de Sistemas)
-  const isTargetTech = /sistemas|software|programad|desarrollad|tecnolog|inform[aá]tic|backend|frontend|devops|data|it\b/i.test(targetLower);
-  const isCandidateChef = /chef|cocin|gastronom|reposter|panader|restaurante/i.test(cvLower);
+  // Motor Universal de Alineación de Dominio Profesional
+  const domainMap = [
+    { name: 'Tecnología y Software', regex: /sistemas|software|programad|desarrollad|tecnolog|inform[aá]tic|backend|frontend|devops|data|it\b/i },
+    { name: 'Contaduría y Finanzas', regex: /contador|contabilid|niif|tributar|auditor|revis|finanz/i },
+    { name: 'Gastronomía y Cocina', regex: /chef|cocin|gastronom|reposter|panader|restaurante/i },
+    { name: 'Salud y Medicina', regex: /m[eé]dico|enfermer|odont[oó]logo|psic[oó]logo|farmac[eé]utico|salud/i },
+    { name: 'Derecho y Leyes', regex: /abogad|jur[ií]dico|derecho|litigante|notarial|leyes/i },
+    { name: 'Diseño y Arte', regex: /dise[nñ]ador|ui\/ux|gr[aá]fico|fot[oó]grafo|ilustrador/i }
+  ];
+
+  const targetDomain = domainMap.find(d => d.regex.test(targetLower));
+  const candidateDomain = domainMap.find(d => d.regex.test(cvLower));
 
   let isRoleIncompatible = false;
   let incompatibilityMsg = '';
 
-  if (isTargetTech && isCandidateChef) {
+  if (targetDomain && candidateDomain && targetDomain.name !== candidateDomain.name) {
     isRoleIncompatible = true;
-    incompatibilityMsg = `Incompatibilidad detectada: El perfil del candidato es Chef / Gastronomía, el cual no guarda relación con la vacante de ${jobTitle || 'Ingeniero de Sistemas'}.`;
+    incompatibilityMsg = `Desalineación de Perfil: La vacante requiere competencias en ${targetDomain.name} (${jobTitle}), mientras que el candidato pertenece a ${candidateDomain.name}.`;
   }
 
   let isVerified = false;
@@ -223,7 +233,7 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   
   let score = Math.min(10, Math.max(3, Math.round((matchesCount / (requiredKeywords.length || 1)) * 6) + 4));
   if (isRoleIncompatible) {
-    score = 1; // Penalización máxima por perfil incompatible
+    score = 1; // Penalización máxima por desalineación de área profesional
   }
 
   let estadoFinal = 'Parcial';
@@ -242,9 +252,9 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
     candidatoNombre: cleanCandName,
     puntuacionIA: score,
     resumenCualitativo: isRoleIncompatible
-      ? `ALERTA DE INCOMPATIBILIDAD PROFESIONAL para ${targetRoleName}: ${cleanCandName} cuenta con formación y experiencia en Gastronomía/Chef. No cumple con las competencias técnicas requeridas para el puesto de ${targetRoleName}.`
-      : `Análisis Cualitativo para ${targetRoleName}: ${cleanCandName} demuestra experiencia relevante orientada a ${targetRoleName}. Se evaluaron sus competencias técnicas y su capacidad real para desempeñar este puesto.`,
-    habilidadesReales: isRoleIncompatible ? ['Gastronomía / Cocina'] : requiredKeywords.filter(k => cvLower.includes(k.toLowerCase())).concat(['Coherencia Laboral', 'Formación Comprobada']),
+      ? `ALERTA DE DESALINEACIÓN PROFESIONAL para ${targetRoleName}: ${cleanCandName} cuenta con formación/experiencia en ${candidateDomain ? candidateDomain.name : 'otro sector'}. Su perfil no guarda relación con la vacante requerida de ${targetRoleName}.`
+      : `Análisis Cualitativo para ${targetRoleName}: ${cleanCandName} demuestra experiencia relevante alineada con ${targetRoleName}. Se evaluaron sus competencias técnicas y su idoneidad para desempeñar este puesto.`,
+    habilidadesReales: isRoleIncompatible ? [candidateDomain ? candidateDomain.name : 'Área Diferente'] : requiredKeywords.filter(k => cvLower.includes(k.toLowerCase())).concat(['Coherencia Laboral', 'Formación Comprobada']),
     verificacionEstudios: {
       estado: estadoFinal,
       detalles: detallesEstado,
