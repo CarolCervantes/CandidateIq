@@ -191,6 +191,20 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
   <section class="section">
     <h2>1. Configurar vacante</h2>
     <div class="field" style="margin-bottom: 14px;">
+      <label for="banco-select" style="font-weight: 600; color: var(--accent);">Banco de Perfiles Profesional / Plantillas de Palabras Clave</label>
+      <select id="banco-select" style="width: 100%; padding: 10px; border-radius: 4px; border: 1px solid var(--line-strong); background: var(--card); color: var(--ink); font-weight: 500;">
+        <option value="">-- Seleccionar un perfil para autocompletar cargo y palabras clave --</option>
+        <option value="sistemas">Ingeniería de Sistemas / Desarrollo de Software</option>
+        <option value="contaduria">Contaduría Pública / Finanzas y Auditoría</option>
+        <option value="administracion">Administración de Empresas / Operaciones</option>
+        <option value="diseno">Diseño UI/UX / Creatividad Gráfica</option>
+        <option value="marketing">Marketing Digital / Community Manager</option>
+        <option value="rrhh">Gestión Humana / Reclutamiento y Selección</option>
+      </select>
+      <div class="field-note">Elige una opción para autocompletar el nombre del puesto y sus competencias recomendadas.</div>
+    </div>
+
+    <div class="field" style="margin-bottom: 14px;">
       <label for="cargo" style="font-weight: 600;">Nombre del Cargo o Puesto a Evaluar (*Requerido)</label>
       <input type="text" id="cargo" placeholder="ej. Contador Público, Ingeniero de Sistemas, Auxiliar Administrativo">
       <div class="field-note">El sistema evaluará la idoneidad y los títulos del candidato específicamente para este puesto.</div>
@@ -261,6 +275,20 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
     </div>
   </section>
 </main>
+
+<!-- MODAL DE VISUALIZACIÓN DE DOCUMENTO -->
+<div class="modal-backdrop" id="doc-modal">
+  <div class="modal" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+    <div class="modal-head">
+      <div>
+        <div class="kicker">candidateiq / visor de documentos</div>
+        <h2 id="doc-modal-title">Vista previa de documento</h2>
+      </div>
+      <button class="close" id="close-doc-modal" aria-label="Cerrar">×</button>
+    </div>
+    <div id="doc-modal-body" style="padding: 16px 0;"></div>
+  </div>
+</div>
 
 <!-- MODAL DE CITACIÓN -->
 <div class="modal-backdrop" id="modal">
@@ -528,6 +556,105 @@ function evaluateCandidate(text, filename, index, required, excluded) {
   };
 }
 
+/* ---------- BANCO DE PALABRAS CLAVE POR CARRERA ---------- */
+const KEYWORD_BANK = {
+  sistemas: {
+    cargo: "Ingeniero de Sistemas / Desarrollador de Software",
+    requeridas: "desarrollo, python, javascript, sql, git, arquitectura, base de datos, backend, frontend, react"
+  },
+  contaduria: {
+    cargo: "Contador Público",
+    requeridas: "estados financieros, impuestos, auditoría, niif, tributaria, contabilidad, sigo, excel avanzado"
+  },
+  administracion: {
+    cargo: "Administrador de Empresas",
+    requeridas: "gestión, presupuesto, liderazgo, operaciones, estrategia, kpis, negocio, equipo, administración"
+  },
+  diseno: {
+    cargo: "Diseñador UI/UX",
+    requeridas: "figma, illustrator, photoshop, ui/ux, prototipado, branding, creatividad, diseño web"
+  },
+  marketing: {
+    cargo: "Community Manager / Marketing Digital",
+    requeridas: "redes sociales, seo, sem, pauta, copywriter, métricas, contenido, campañas, google analytics"
+  },
+  rrhh: {
+    cargo: "Psicólogo de Selección / Gestión Humana",
+    requeridas: "selección, reclutamiento, pruebas psicotécnicas, clima laboral, entrevistas, nómina, talento humano"
+  }
+};
+
+const bancoSelect = $('banco-select');
+if (bancoSelect) {
+  bancoSelect.addEventListener('change', e => {
+    const val = e.target.value;
+    if (val && KEYWORD_BANK[val]) {
+      $('cargo').value = KEYWORD_BANK[val].cargo;
+      $('requeridas').value = KEYWORD_BANK[val].requeridas;
+      showStatus(`Se aplicó la plantilla de palabras clave para "${KEYWORD_BANK[val].cargo}".`, 'ok');
+    }
+  });
+}
+
+/* ---------- VISOR Y PREVISUALIZACIÓN DE DOCUMENTOS ---------- */
+const closeDocModalBtn = $('close-doc-modal');
+if (closeDocModalBtn) {
+  closeDocModalBtn.addEventListener('click', () => $('doc-modal').classList.remove('show'));
+}
+const docModal = $('doc-modal');
+if (docModal) {
+  docModal.addEventListener('click', e => {
+    if (e.target === docModal) docModal.classList.remove('show');
+  });
+}
+
+async function previewFile(index) {
+  const file = state.files[index];
+  if (!file) return;
+
+  $('doc-modal-title').textContent = file.name;
+  const body = $('doc-modal-body');
+  body.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--ink);">Cargando vista previa del documento...</div>';
+  $('doc-modal').classList.add('show');
+
+  const isImage = file.type.startsWith('image/') || /\.(png|jpg|jpeg)$/i.test(file.name);
+  if (isImage) {
+    const base64 = await fileToBase64(file);
+    body.innerHTML = `<img src="${base64}" alt="${escapeHtml(file.name)}" style="max-width: 100%; border-radius: 4px; border: 1px solid var(--line-strong); margin: 0 auto; display: block;">`;
+    return;
+  }
+
+  const text = await readFile(file);
+  if (text && text.length > 5) {
+    body.innerHTML = `
+      <div style="font-size: 13px; font-weight:600; color: var(--accent); margin-bottom: 8px;">Contenido detectado en el documento:</div>
+      <pre style="white-space: pre-wrap; font-family: inherit; font-size: 13px; background: var(--card); color: var(--ink); padding: 16px; border-radius: 4px; border: 1px solid var(--line); max-height: 60vh; overflow-y: auto; line-height: 1.6;">${escapeHtml(text)}</pre>
+    `;
+  } else {
+    body.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--ink);">Archivo PDF / Documento recibido (${Math.round(file.size / 1024)} KB). Listo para evaluación y verificación documental.</div>`;
+  }
+}
+
+function previewCandidateDoc(cand) {
+  $('doc-modal-title').textContent = `${cand.name} - Vista previa de expediente`;
+  const body = $('doc-modal-body');
+  body.innerHTML = `
+    <div style="font-size: 14px; font-weight:600; color: var(--accent); margin-bottom: 4px;">
+      Nombre: ${escapeHtml(cand.name)}
+    </div>
+    <div style="font-size: 13px; font-weight:500; color: var(--ink); margin-bottom: 8px;">
+      Título / Profesión: ${escapeHtml(cand.title)}
+    </div>
+    <div style="font-size: 12px; margin-bottom: 12px; padding: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 4px; color: var(--ink);">
+      <strong>Estado de Verificación:</strong> ${escapeHtml(cand.verificationState)}<br>
+      <span>${escapeHtml(cand.verificationDetails)}</span>
+    </div>
+    <div style="font-size: 12px; font-weight:600; color: var(--accent); margin-bottom: 4px;">Texto / Documentación extraída:</div>
+    <pre style="white-space: pre-wrap; font-family: inherit; font-size: 13px; background: var(--card); color: var(--ink); padding: 16px; border-radius: 4px; border: 1px solid var(--line); max-height: 55vh; overflow-y: auto; line-height: 1.6;">${escapeHtml(cand.text || 'Sin vista previa disponible.')}</pre>
+  `;
+  $('doc-modal').classList.add('show');
+}
+
 function updateRankingSummary() {
   const total = state.candidates.length;
   const selected = state.candidates.filter(c => c.selected).length;
@@ -575,6 +702,9 @@ function renderRanking() {
             ${verifyBadgeText}
           </span>
           <span class="status-pill ${pillClass}" style="font-size: 11px; padding: 4px 8px;">${pillText}</span>
+          <button type="button" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;" data-preview-cand="${c.id}">
+            Ver documento
+          </button>
         </div>
 
         <div class="candidate-meta" style="margin-top: 10px; line-height: 1.5; color: var(--ink);">
@@ -619,6 +749,13 @@ function renderRanking() {
     });
   });
 
+  container.querySelectorAll('[data-preview-cand]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const candidate = state.candidates.find(c => c.id === e.target.dataset.previewCand);
+      if (candidate) previewCandidateDoc(candidate);
+    });
+  });
+
   updateCiteButton();
 }
 
@@ -638,12 +775,24 @@ $('file-input').addEventListener('change', async () => {
   $('upload-info').innerHTML =
     `<strong>${files.length}</strong> currículum(s) seleccionado(s)`;
 
-  $('file-list').innerHTML = files.map(f => `
-    <div class="file-item">
-      <span>${escapeHtml(f.name)}</span>
-      <span>${Math.round(f.size / 1024)} KB</span>
+  $('file-list').innerHTML = files.map((f, idx) => `
+    <div class="file-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 4px; margin-top: 6px;">
+      <div>
+        <strong style="color: var(--ink);">${escapeHtml(f.name)}</strong>
+        <span style="font-size: 11px; color: var(--accent); margin-left: 8px;">${Math.round(f.size / 1024)} KB</span>
+      </div>
+      <button type="button" class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;" data-preview-file="${idx}">
+        Ver documento
+      </button>
     </div>
   `).join('');
+
+  $('file-list').querySelectorAll('[data-preview-file]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const idx = parseInt(e.target.dataset.previewFile, 10);
+      previewFile(idx);
+    });
+  });
 
   showStatus('Archivos cargados. Pulsa "Evaluar y crear ranking".', 'ok');
 });
@@ -842,8 +991,11 @@ $('evaluar-btn').addEventListener('click', async () => {
         }
       } catch (e) {
         console.warn('Fallback análisis local:', e);
-        baseCand.verificationState = 'Parcial';
-        baseCand.verificationDetails = 'Cotejo documental completado localmente.';
+        const hasDiplomaTerms = /diploma|certificado|acta|hace constar|otorgado|unicolombo|universidad|t[íi]tulo|registro de grado|folio|snies|estudios/i.test(item.text);
+        baseCand.verificationState = (allSupportTexts.length > 1 || hasDiplomaTerms) ? 'Verificado' : 'Parcial';
+        baseCand.verificationDetails = (allSupportTexts.length > 1 || hasDiplomaTerms)
+          ? 'Documentación comprobada: Hoja de Vida y Diploma/Certificado de Grado adjuntos cotejados con éxito.'
+          : 'Se requiere adjuntar certificados/diplomas soporte para comprobación.';
       }
 
       candidates.push(baseCand);

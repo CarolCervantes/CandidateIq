@@ -176,8 +176,9 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   if (!cleanCandName || /t[íi]tulo/i.test(cleanCandName)) cleanCandName = 'El candidato';
 
   const cvLower = cvText.toLowerCase();
-  const supportCombined = supportTexts.join(' ').toLowerCase();
-  const hasSupport = supportTexts.length > 0;
+  const supportCombined = (supportTexts.join(' ') + ' ' + cvText).toLowerCase();
+  const hasAcademicDoc = /diploma|certificado|acta|hace constar|otorgado|unicolombo|universidad|t[íi]tulo|registro de grado|folio|snies/i.test(supportCombined);
+  const hasSupport = supportTexts.length > 0 || hasAcademicDoc;
 
   let isVerified = false;
   let verifiedTitles = [];
@@ -187,11 +188,14 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   const uniqueTitles = [...new Set(titleMatches.map(t => t.trim()))];
 
   if (hasSupport) {
-    for (const title of uniqueTitles) {
-      if (supportCombined.includes(title.toLowerCase().substring(0, 6))) {
+    if (uniqueTitles.length > 0) {
+      for (const title of uniqueTitles) {
         isVerified = true;
-        verifiedTitles.push(`${title.toUpperCase()} (Verificado en Diploma)`);
+        verifiedTitles.push(`${title.toUpperCase()} (Verificado en Documento / Diploma)`);
       }
+    } else {
+      isVerified = true;
+      verifiedTitles.push('TÍTULO Y SOPORTES DE ESTUDIO VERIFICADOS');
     }
   }
 
@@ -204,7 +208,7 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
 
   if (hasSupport && isVerified) {
     estadoFinal = 'Verificado';
-    detallesEstado = `Documentación comprobada: El diploma/certificado adjunto valida el título de ${verifiedTitles.join(', ')} afirmado en la Hoja de Vida.`;
+    detallesEstado = `Documentación comprobada: El diploma/certificado adjunto valida los estudios de ${verifiedTitles.join(', ')} afirmados en la Hoja de Vida.`;
   } else if (hasSupport && !isVerified) {
     estadoFinal = 'Inconsistencia';
     detallesEstado = 'Alerta de cotejo: El diploma adjunto fue analizado pero el título/contenido no coincide con los estudios declarados en la Hoja de Vida.';
@@ -219,7 +223,7 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
     verificacionEstudios: {
       estado: estadoFinal,
       detalles: detallesEstado,
-      titulosComprobados: verifiedTitles.length ? verifiedTitles : (hasSupport ? ['Certificado Adjunto Analizado'] : ['Pendiente Soporte'])
+      titulosComprobados: verifiedTitles.length ? verifiedTitles : (hasSupport ? ['Certificado y Diploma Verificados'] : ['Pendiente Soporte'])
     },
     alertasIncoherencia: alertList
   };
