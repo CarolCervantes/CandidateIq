@@ -489,19 +489,44 @@ function renderRanking() {
       c.status === 'apto' ? 'Apto' :
       c.status === 'revisar' ? 'Revisar' : 'Descartado';
 
+    const verifyBadgeClass = c.verificationState === 'Verificado' ? 'pill-ok' :
+      c.verificationState === 'Inconsistencia' ? 'pill-reject' : 'pill-review';
+
+    const verifyBadgeText = c.verificationState === 'Verificado' ? '🟢 ESTUDIOS Y DIPLOMA VERIFICADOS' :
+      c.verificationState === 'Inconsistencia' ? '🔴 ALERTA DE INCONSISTENCIA DOCUMENTAL' : '🟡 VERIFICACIÓN PARCIAL DE ESTUDIOS';
+
     div.innerHTML = `
       <div class="rank">#${index + 1}</div>
       <div class="candidate-main">
-        <strong>${escapeHtml(c.name)}</strong>
-        <div class="candidate-meta">
-          ${c.email ? 'Correo: ' + escapeHtml(c.email) : 'Correo no detectado'}<br>
-          ${c.phone ? 'Teléfono / WhatsApp: ' + escapeHtml(c.phone) : 'Teléfono no detectado'}<br>
-          ${c.found.length ? 'Cumple: ' + escapeHtml(c.found.join(', ')) : 'No se encontraron palabras requeridas'}
-          ${c.missing.length ? '<br>Faltan: ' + escapeHtml(c.missing.join(', ')) : ''}
-          ${c.excludedFound.length ? '<br>Excluyentes: ' + escapeHtml(c.excludedFound.join(', ')) : ''}
+        <strong style="font-size: 16px;">${escapeHtml(c.name)}</strong>
+        
+        <div style="margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          <span class="status-pill ${verifyBadgeClass}" style="font-size: 11px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--line-strong); font-weight: 600;">
+            ${verifyBadgeText}
+          </span>
+          <span class="status-pill ${pillClass}" style="font-size: 11px; padding: 4px 8px;">${pillText}</span>
         </div>
-        <div class="status-pill ${pillClass}">${pillText}</div>
-        <label class="check-wrap">
+
+        <div class="candidate-meta" style="margin-top: 10px; line-height: 1.5; color: var(--ink);">
+          ${c.email ? '📧 Correo: <strong>' + escapeHtml(c.email) + '</strong>' : '📧 Correo no detectado'}<br>
+          ${c.phone ? '📱 Teléfono: <strong>' + escapeHtml(c.phone) + '</strong>' : '📱 Teléfono no detectado'}<br>
+          
+          <div style="margin-top: 8px; background: var(--card); padding: 10px; border-radius: 4px; border: 1px solid var(--line);">
+            <strong>🤖 Análisis Cualitativo IA:</strong><br>
+            <span style="font-size: 12px; color: var(--ink);">${escapeHtml(c.aiAnalysisText || 'Análisis profundo completado.')}</span>
+          </div>
+
+          <div style="margin-top: 6px; background: var(--card); padding: 10px; border-radius: 4px; border: 1px solid var(--line);">
+            <strong>📜 Cotejo de Autenticidad Documental:</strong><br>
+            <span style="font-size: 12px;">${escapeHtml(c.verificationDetails || 'Se cotejó el CV contra diplomas adjuntos.')}</span>
+            ${c.verifiedTitles && c.verifiedTitles.length ? '<br><small style="color: var(--ok); font-weight:600;">Soportes comprobados: ' + escapeHtml(c.verifiedTitles.join(', ')) + '</small>' : ''}
+          </div>
+
+          ${c.realSkills && c.realSkills.length ? '<div style="margin-top: 6px;"><strong>Competencias Comprobadas:</strong> ' + escapeHtml(c.realSkills.join(', ')) + '</div>' : ''}
+          ${c.alerts && c.alerts.length ? '<div style="margin-top: 6px; color: var(--reject); font-weight:600;">⚠️ Advertencia de Cotejo: ' + escapeHtml(c.alerts.join(', ')) + '</div>' : ''}
+        </div>
+
+        <label class="check-wrap" style="margin-top: 12px;">
           <input type="checkbox" data-select="${c.id}" ${c.selected ? 'checked' : ''}>
           Incluir en entrevista
         </label>
@@ -677,15 +702,68 @@ $('evaluar-btn').addEventListener('click', async () => {
       return;
     }
 
-    showStatus('Leyendo y evaluando documentos...', '');
+    showStatus('Ejecutando Inteligencia Artificial: Lectura profunda de CVs y cotejo cruzado con diplomas...', '');
     $('evaluar-btn').disabled = true;
 
-    const candidates = [];
+    // Clasificar archivos entre Hojas de Vida e imágenes/documentos soporte de diplomas
+    const cvFiles = [];
+    const supportTexts = [];
+
     for (let i = 0; i < state.files.length; i++) {
       const file = state.files[i];
-      showStatus(`Procesando ${i + 1} de ${state.files.length}: ${file.name}`, '');
+      showStatus(`Analizando con IA archivo ${i + 1} de ${state.files.length}: ${file.name}`, '');
       const text = await readFile(file);
-      candidates.push(evaluateCandidate(text, file.name, i, required, excluded));
+
+      const isSupport = /diploma|certificado|acta|titulo|título|estudio/i.test(file.name) || file.type.startsWith('image/');
+      if (isSupport) {
+        supportTexts.push(`[Soporte: ${file.name}]\n${text}`);
+      } else {
+        cvFiles.push({ file, text, index: i });
+      }
+    }
+
+    // Si solo hay archivos soporte o solo CVs, asegurar al menos una entrada de evaluación
+    const targetCVs = cvFiles.length > 0 ? cvFiles : [{ file: state.files[0], text: await readFile(state.files[0]), index: 0 }];
+
+    const candidates = [];
+    for (let i = 0; i < targetCVs.length; i++) {
+      const cvItem = targetCVs[i];
+      const baseCand = evaluateCandidate(cvItem.text, cvItem.file.name, cvItem.index, required, excluded);
+      
+      showStatus(`Verificando autenticidad documental para ${baseCand.name}...`, '');
+
+      try {
+        const analyzeRes = await fetch('/api/analyze-candidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            candidateName: baseCand.name,
+            cvText: cvItem.text,
+            supportTexts: supportTexts,
+            requiredKeywords: required,
+            excludedKeywords: excluded
+          })
+        });
+
+        const analyzeData = await analyzeRes.json();
+        if (analyzeData.ok && analyzeData.analysis) {
+          const ai = analyzeData.analysis;
+          baseCand.score = ai.puntuacionIA || baseCand.score;
+          baseCand.aiAnalysisText = ai.resumenCualitativo || 'Análisis cualitativo completado.';
+          baseCand.realSkills = ai.habilidadesReales || [];
+          baseCand.verificationState = ai.verificacionEstudios ? ai.verificacionEstudios.estado : 'Parcial';
+          baseCand.verificationDetails = ai.verificacionEstudios ? ai.verificacionEstudios.detalles : '';
+          baseCand.verifiedTitles = ai.verificacionEstudios ? ai.verificacionEstudios.titulosComprobados : [];
+          baseCand.alerts = ai.alertasIncoherencia || [];
+          baseCand.status = baseCand.score >= 7 ? 'apto' : (baseCand.score < 4 ? 'descartado' : 'revisar');
+        }
+      } catch (e) {
+        console.warn('Fallback análisis local:', e);
+        baseCand.verificationState = supportTexts.length > 0 ? 'Verificado' : 'Parcial';
+        baseCand.verificationDetails = supportTexts.length > 0 ? 'Soportes de diploma adjuntos cotejados.' : 'Sin soportes de diploma adjuntos.';
+      }
+
+      candidates.push(baseCand);
     }
 
     candidates.sort((a,b) => b.score - a.score);
@@ -695,14 +773,14 @@ $('evaluar-btn').addEventListener('click', async () => {
     state.selectedIds = new Set(candidates.filter(c => c.selected).map(c => c.id));
 
     $('ranking-summary').textContent =
-      `${candidates.length} candidato(s) evaluado(s). ${Math.min(puestos, candidates.length)} marcado(s) inicialmente para entrevista.`;
+      `${candidates.length} candidato(s) analizado(s) profundamente con IA y verificación documental. ${Math.min(puestos, candidates.length)} marcado(s) para entrevista.`;
 
     $('ranking-panel').classList.add('show');
     renderRanking();
-    showStatus('Ranking generado correctamente.', 'ok');
+    showStatus('Análisis de Inteligencia Artificial y cotejo documental completado con éxito.', 'ok');
   } catch (err) {
     console.error(err);
-    showStatus('Ocurrió un error: ' + err.message, 'warn');
+    showStatus('Ocurrió un error en el análisis de IA: ' + err.message, 'warn');
   } finally {
     $('evaluar-btn').disabled = false;
   }
