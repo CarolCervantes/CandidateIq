@@ -105,7 +105,9 @@ ${supportTexts.length > 0 ? supportTexts.join('\n---\n').slice(0, 4000) : 'NO SE
 """
 
 REGLAS DE EVALUACIÓN Y VERIFICACIÓN CRUZADA:
-1. Evalúa la idoneidad y competencias del candidato ESPECÍFICAMENTE para el cargo de "${jobTitle || 'Vacante General'}". No te limites a contar palabras. Analiza la COHERENCIA REAL de su experiencia laboral, responsabilidades y capacidad técnica.
+1. ALINEACIÓN DEL CARGO Y TITULACIÓN: Evalúa la idoneidad y competencias del candidato ESPECÍFICAMENTE para el cargo de "${jobTitle || 'Vacante General'}".
+   - Si la profesión del candidato (ej. Chef, Cocinero) no tiene relación alguna con la vacante solicitada (ej. Ingeniero de Sistemas, Contador), penaliza fuertemente su puntuación (asignando una puntuación máxima de 1 a 3/10) y marca estado "Descartado".
+   - Un candidato con perfil o título completamente incompatible NUNCA debe quedar en los primeros lugares del ranking.
 2. COTEJO DE DIPLOMAS: Compara los estudios superiores o títulos declarados en la Hoja de Vida contra el texto de los Diplomas/Certificados adjuntos.
    - Si los diplomas respaldan exactamente los títulos afirmados (coinciden título e institución), asigna estado "Verificado".
    - Si afirma estudios pero faltan diplomas de respaldo, asigna estado "Parcial".
@@ -172,17 +174,34 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   }
 
   // 3. Motor Inteligente de Cotejo Local (Fallback cuando no hay API Key activa)
-  let cleanCandName = String(candidateName || 'El candidato').replace(/^(t[íi]tulo|profesional|candidato)\s*[:.-]?\s*/i, '').replace(/\b(apellido|apellidos)\b\s*[:.-]?/gi, '').trim();
+  let cleanCandName = String(candidateName || 'El candidato').replace(/^(t[íi]tulo|profesional|candidato)\s*[:.-]?\s*/i, '').replace(/\b(apellido|apellidos)\b\s*[:.-]?\s*/gi, '').trim();
   if (!cleanCandName || /t[íi]tulo/i.test(cleanCandName) || /\bapellido\b/i.test(cleanCandName)) cleanCandName = 'El candidato';
 
   const cvLower = cvText.toLowerCase();
+  const targetLower = (jobTitle || '').toLowerCase();
   const supportCombined = (supportTexts.join(' ') + ' ' + cvText).toLowerCase();
   const hasAcademicDoc = /diploma|certificado|acta|hace constar|otorgado|unicolombo|universidad|t[íi]tulo|registro de grado|folio|snies/i.test(supportCombined);
   const hasSupport = supportTexts.length > 0 || hasAcademicDoc;
 
+  // Verificación de compatibilidad de rol (ej. Chef vs Ingeniero de Sistemas)
+  const isTargetTech = /sistemas|software|programad|desarrollad|tecnolog|inform[aá]tic|backend|frontend|devops|data|it\b/i.test(targetLower);
+  const isCandidateChef = /chef|cocin|gastronom|reposter|panader|restaurante/i.test(cvLower);
+
+  let isRoleIncompatible = false;
+  let incompatibilityMsg = '';
+
+  if (isTargetTech && isCandidateChef) {
+    isRoleIncompatible = true;
+    incompatibilityMsg = `Incompatibilidad detectada: El perfil del candidato es Chef / Gastronomía, el cual no guarda relación con la vacante de ${jobTitle || 'Ingeniero de Sistemas'}.`;
+  }
+
   let isVerified = false;
   let verifiedTitles = [];
   let alertList = [];
+
+  if (isRoleIncompatible) {
+    alertList.push(incompatibilityMsg);
+  }
 
   const titleMatches = cvText.match(/(?:contador[a]?\s+p[uú]blic[oa]|ingenier[oa]|administrador[a]|tecn[oó]log[oa]|bachiller|diplomado|licenciad[oa])/gi) || [];
   const uniqueTitles = [...new Set(titleMatches.map(t => t.trim()))];
@@ -201,7 +220,11 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
 
   const matchesCount = requiredKeywords.filter(k => cvLower.includes(k.toLowerCase())).length;
   const targetRoleName = jobTitle || requiredKeywords.join(', ') || 'el cargo seleccionado';
-  const score = Math.min(10, Math.max(3, Math.round((matchesCount / (requiredKeywords.length || 1)) * 6) + 4));
+  
+  let score = Math.min(10, Math.max(3, Math.round((matchesCount / (requiredKeywords.length || 1)) * 6) + 4));
+  if (isRoleIncompatible) {
+    score = 1; // Penalización máxima por perfil incompatible
+  }
 
   let estadoFinal = 'Parcial';
   let detallesEstado = 'El candidato afirma estudios en su CV, pero se requiere adjuntar sus certificados/diplomas soporte para comprobación.';
@@ -218,8 +241,10 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   return {
     candidatoNombre: cleanCandName,
     puntuacionIA: score,
-    resumenCualitativo: `Análisis Cualitativo para ${targetRoleName}: ${cleanCandName} demuestra experiencia relevante orientada a ${targetRoleName}. Se evaluaron sus competencias técnicas y su capacidad real para desempeñar este puesto.`,
-    habilidadesReales: requiredKeywords.filter(k => cvLower.includes(k.toLowerCase())).concat(['Coherencia Laboral', 'Formación Comprobada']),
+    resumenCualitativo: isRoleIncompatible
+      ? `ALERTA DE INCOMPATIBILIDAD PROFESIONAL para ${targetRoleName}: ${cleanCandName} cuenta con formación y experiencia en Gastronomía/Chef. No cumple con las competencias técnicas requeridas para el puesto de ${targetRoleName}.`
+      : `Análisis Cualitativo para ${targetRoleName}: ${cleanCandName} demuestra experiencia relevante orientada a ${targetRoleName}. Se evaluaron sus competencias técnicas y su capacidad real para desempeñar este puesto.`,
+    habilidadesReales: isRoleIncompatible ? ['Gastronomía / Cocina'] : requiredKeywords.filter(k => cvLower.includes(k.toLowerCase())).concat(['Coherencia Laboral', 'Formación Comprobada']),
     verificacionEstudios: {
       estado: estadoFinal,
       detalles: detallesEstado,

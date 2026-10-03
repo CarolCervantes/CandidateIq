@@ -542,12 +542,20 @@ function escapeHtml(str) {
 
 function evaluateCandidate(text, filename, index, required, excluded, rawFile = null) {
   const cv = text.toLowerCase();
+  const cargoVal = ($('cargo') ? $('cargo').value : '').toLowerCase();
   const found = required.filter(k => cv.includes(k));
   const missing = required.filter(k => !cv.includes(k));
   const excludedFound = excluded.filter(k => cv.includes(k));
 
   let score = required.length ? Math.round((found.length / required.length) * 10) : 5;
   if (excludedFound.length) score = Math.max(1, Math.min(score, 3));
+
+  // Penalización automática por incompatibilidad de carrera (ej. Chef vs Ingeniero de Sistemas)
+  const isTargetTech = /sistemas|software|programad|desarrollad|tecnolog|inform[aá]tic|backend|frontend|devops|data|it\b/i.test(cargoVal);
+  const isCandidateChef = /chef|cocin|gastronom|reposter|panader|restaurante/i.test(cv);
+  if (isTargetTech && isCandidateChef) {
+    score = 1;
+  }
 
   let status = 'revisar';
   if (score >= 7) status = 'apto';
