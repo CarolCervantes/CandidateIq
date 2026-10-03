@@ -375,26 +375,53 @@ function escapeText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function extractName(text, filename) {
+function extractCandidateDetails(text, filename) {
   const lines = text.split(/\r?\n/).map(x => escapeText(x)).filter(Boolean);
-  const bad = /^(curriculum|curr[íi]culum|hoja de vida|resume|cv|perfil|contacto|experiencia|educaci[oó]n|habilidades|datos\s+personales|informaci[oó]n\s+personal|datos\s+de\s+contacto|informaci[oó]n\s+general|resumen\s+ejecutivo|datos)$/i;
+  const badHeader = /^(curriculum|curr[íi]culum|hoja de vida|resume|cv|perfil|contacto|experiencia|educaci[oó]n|habilidades|datos\s+personales|informaci[oó]n\s+personal|datos\s+de\s+contacto|informaci[oó]n\s+general|resumen\s+ejecutivo|datos|nombre)$/i;
+  const professionRegex = /(?:contador[a]?\s+p[uú]blic[oa]|ingenier[oa](?:\s+de\s+\w+)?|administrador[a](?:\s+de\s+\w+)?|tecn[oó]log[oa](?:\s+en\s+\w+)?|analista(?:\s+\w+)?|community\s+manager|chef|auxiliar(?:\s+\w+)?|desarrollador[a]|dise[nñ]ador[a]|licenciad[oa]|psic[oó]log[oa]|m[eé]dic[oa]|abogad[oa]|mercad[oó]log[oa])/i;
 
+  let rawLine = '';
   for (const line of lines.slice(0, 15)) {
+    const cleanLine = line.replace(/^(nombre|candidato)\s*[:.-]?\s*/i, '').trim();
     if (
-      line.length >= 4 && line.length <= 70 &&
-      !bad.test(line) &&
-      !/@/.test(line) &&
-      !/\d{6,}/.test(line) &&
-      !/https?:\/\//i.test(line)
+      cleanLine.length >= 4 && cleanLine.length <= 70 &&
+      !badHeader.test(cleanLine) &&
+      !/@/.test(cleanLine) &&
+      !/\d{6,}/.test(cleanLine) &&
+      !/https?:\/\//i.test(cleanLine)
     ) {
-      const words = line.split(/\s+/);
-      if (words.length >= 2 && words.length <= 6) return line;
+      rawLine = cleanLine;
+      break;
     }
   }
 
-  const cleanFilename = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-  const fileWords = cleanFilename.split(/\s+/).filter(w => !/^(cv|curriculum|hoja|de|vida|doc|pdf|txt|diploma|certificado)$/i.test(w));
-  return fileWords.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ') || 'Candidato';
+  if (!rawLine) {
+    const cleanFilename = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    rawLine = cleanFilename;
+  }
+
+  let name = rawLine;
+  let title = '';
+
+  const profMatch = rawLine.match(professionRegex);
+  if (profMatch) {
+    title = profMatch[0].trim();
+    name = rawLine.replace(profMatch[0], '').replace(/^(de|en|para)\s+/i, '').trim();
+  }
+
+  name = name.replace(/^(nombre|candidato)\s*[:.-]?\s*/i, '').replace(/[_-]+/g, ' ').trim();
+  if (!name || name.length < 3) {
+    name = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+  }
+
+  name = name.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  title = title ? title.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ') : 'Profesional / Postulante';
+
+  return { name, title };
+}
+
+function extractName(text, filename) {
+  return extractCandidateDetails(text, filename).name;
 }
 
 function extractEmail(text) {
@@ -462,10 +489,13 @@ function evaluateCandidate(text, filename, index, required, excluded) {
   if (score >= 7) status = 'apto';
   else if (score < 4) status = 'descartado';
 
+  const { name, title } = extractCandidateDetails(text, filename);
+
   return {
     id: 'candidate-' + Date.now() + '-' + index,
     filename,
-    name: extractName(text, filename),
+    name,
+    title,
     email: extractEmail(text),
     phone: extractPhone(text),
     text,
@@ -507,9 +537,12 @@ function renderRanking() {
     div.innerHTML = `
       <div class="rank">#${index + 1}</div>
       <div class="candidate-main">
-        <strong style="font-size: 16px;">${escapeHtml(c.name)}</strong>
+        <strong style="font-size: 17px; color: var(--ink);">${escapeHtml(c.name)}</strong>
+        <div style="font-size: 13px; font-weight: 600; color: var(--accent); margin-top: 2px;">
+          🎓 Título / Profesión: ${escapeHtml(c.title)}
+        </div>
         
-        <div style="margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+        <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
           <span class="status-pill ${verifyBadgeClass}" style="font-size: 11px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--line-strong); font-weight: 600;">
             ${verifyBadgeText}
           </span>
