@@ -377,57 +377,65 @@ function escapeText(value) {
 
 function extractCandidateDetails(text, filename) {
   const lines = text.split(/\r?\n/).map(x => escapeText(x)).filter(Boolean);
-  const badHeader = /^(\[.*\]|curriculum|curr[íi]culum|hoja de vida|resume|cv|perfil|contacto|experiencia|educaci[oó]n|habilidades|datos\s+personales|informaci[oó]n\s+personal|datos\s+de\s+contacto|informaci[oó]n\s+general|resumen\s+ejecutivo|datos|nombre|extracto|soportes?|diploma|acta|certificado|rep[uú]blica|ministerio)$/i;
+  const badHeader = /^(\[.*\]|curriculum|curr[íi]culum|hoja de vida|resume|cv|perfil|contacto|experiencia|educaci[oó]n|habilidades|datos\s+personales|informaci[oó]n\s+personal|datos\s+de\s+contacto|informaci[oó]n\s+general|resumen\s+ejecutivo|datos|nombre|extracto|soportes?|diploma|acta|certificado|rep[uú]blica|ministerio|t[íi]tulo|instituci[oó]n|estado|nota|documento|folio|c[oó]digo)$/i;
   const professionRegex = /(?:contador[a]?\s+p[uú]blic[oa]|ingenier[oa](?:\s+de\s+\w+)?|administrador[a](?:\s+de\s+\w+)?|tecn[oó]log[oa](?:\s+en\s+\w+)?|analista(?:\s+\w+)?|community\s+manager|chef|auxiliar(?:\s+\w+)?|desarrollador[a]|dise[nñ]ador[a]|licenciad[oa]|psic[oó]log[oa]|m[eé]dic[oa]|abogad[oa]|mercad[oó]log[oa])/i;
 
-  let rawLine = '';
+  let name = '';
+  let title = '';
 
-  const constarMatch = text.match(/(?:hace constar que|otorgado a|candidato|postulante|nombre)\s*[:.-]?\s*([A-ZÁÉÍÓÚÑa-zñáéíóú\s]{4,50})/i);
-  if (constarMatch && constarMatch[1].trim().length >= 4 && !badHeader.test(constarMatch[1].trim())) {
-    rawLine = constarMatch[1].trim();
+  const textProfMatch = text.match(professionRegex);
+  if (textProfMatch) {
+    title = textProfMatch[0].trim();
   }
 
-  if (!rawLine) {
+  const explicitNameMatch = text.match(/(?:nombre|candidato|postulante|graduado|hace constar que|otorgado a|confiere a)\s*[:.-]?\s*([A-ZÁÉÍÓÚÑa-zñáéíóú\s]{4,50})/i);
+  if (explicitNameMatch) {
+    const candidateStr = explicitNameMatch[1].trim();
+    if (candidateStr.length >= 4 && !badHeader.test(candidateStr) && !/t[íi]tulo/i.test(candidateStr) && !/profesional/i.test(candidateStr)) {
+      name = candidateStr;
+    }
+  }
+
+  if (!name) {
     for (const line of lines.slice(0, 15)) {
       const cleanLine = line.replace(/^(nombre|candidato|postulante)\s*[:.-]?\s*/i, '').replace(/^\[.*\]\s*/, '').trim();
       if (
         cleanLine.length >= 4 && cleanLine.length <= 60 &&
         !badHeader.test(cleanLine) &&
         !/^\[.*\]$/.test(cleanLine) &&
+        !/^(t[íi]tulo|instituci[oó]n|estado|nota|documento|soporte|folio|acta|universidad|ministerio|rep[uú]blica|fecha|c[oó]digo)\s*[:.-]/i.test(cleanLine) &&
         !/@/.test(cleanLine) &&
-        !/\d{6,}/.test(cleanLine) &&
+        !/\d{5,}/.test(cleanLine) &&
         !/https?:\/\//i.test(cleanLine)
       ) {
-        rawLine = cleanLine;
-        break;
+        const isOnlyProf = professionRegex.test(cleanLine) && cleanLine.split(/\s+/).length <= 3;
+        if (!isOnlyProf) {
+          name = cleanLine;
+          break;
+        }
       }
     }
   }
 
-  if (!rawLine || badHeader.test(rawLine) || /^\[.*\]$/.test(rawLine)) {
-    let cleanFilename = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-    cleanFilename = cleanFilename.replace(/^(diploma|certificado|acta|cv|curriculum|hoja\s+de\s+vida)\s*/i, '');
-    rawLine = cleanFilename;
-  }
-
-  let name = rawLine;
-  let title = '';
-
-  const profMatch = rawLine.match(professionRegex);
-  if (profMatch) {
-    title = profMatch[0].trim();
-    name = rawLine.replace(profMatch[0], '').replace(/^(de|en|para)\s+/i, '').trim();
+  if (!name || name.length < 3 || badHeader.test(name) || /t[íi]tulo/i.test(name) || /profesional/i.test(name)) {
+    let cleanF = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    cleanF = cleanF.replace(/^(diploma|certificado|acta|cv|curriculum|hoja\s+de\s+vida|soporte|candidato_\d+|doc)\s*/i, '').trim();
+    const words = cleanF.split(/\s+/).filter(w => !/^(diploma|certificado|acta|cv|curriculum|hoja|de|vida|doc|pdf|txt|jpg|png|soporte|\d+)$/i.test(w));
+    if (words.length > 0) {
+      name = words.join(' ');
+    } else {
+      name = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
+    }
   }
 
   name = name.replace(/^(nombre|candidato|postulante)\s*[:.-]?\s*/i, '').replace(/^\[.*\]\s*/, '').replace(/[_-]+/g, ' ').trim();
-  if (!name || name.length < 3 || badHeader.test(name)) {
-    let cleanF = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-    const words = cleanF.split(/\s+/).filter(w => !/^(diploma|certificado|acta|cv|curriculum|hoja|de|vida|doc|pdf|txt|jpg|png)$/i.test(w));
-    name = words.join(' ');
-  }
-
   name = name.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-  title = title ? title.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ') : 'Profesional / Postulante';
+
+  if (!title) {
+    title = 'Profesional / Postulante';
+  } else {
+    title = title.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  }
 
   return { name, title };
 }
@@ -815,6 +823,8 @@ $('evaluar-btn').addEventListener('click', async () => {
         const analyzeData = await analyzeRes.json();
         if (analyzeData.ok && analyzeData.analysis) {
           const ai = analyzeData.analysis;
+          if (ai.candidatoNombre && !/t[íi]tulo/i.test(ai.candidatoNombre)) baseCand.name = ai.candidatoNombre;
+          if (ai.candidatoTitulo) baseCand.title = ai.candidatoTitulo;
           baseCand.score = ai.puntuacionIA || baseCand.score;
           baseCand.aiAnalysisText = ai.resumenCualitativo || 'Análisis cualitativo completado.';
           baseCand.realSkills = ai.habilidadesReales || [];

@@ -113,6 +113,8 @@ REGLAS DE EVALUACIÓN Y VERIFICACIÓN CRUZADA:
 
 Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin bloques markdown de código extras):
 {
+  "candidatoNombre": "Nombre Completo del Candidato",
+  "candidatoTitulo": "Título Profesional o Profesión",
   "puntuacionIA": 9,
   "resumenCualitativo": "Explicación detallada de la idoneidad y competencias reales del candidato para el cargo de ${jobTitle || 'Vacante'}...",
   "habilidadesReales": ["Habilidad 1", "Habilidad 2", "Habilidad 3"],
@@ -170,6 +172,9 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   }
 
   // 3. Motor Inteligente de Cotejo Local (Fallback cuando no hay API Key activa)
+  let cleanCandName = String(candidateName || 'El candidato').replace(/^(t[íi]tulo|profesional|candidato)\s*[:.-]?\s*/i, '').trim();
+  if (!cleanCandName || /t[íi]tulo/i.test(cleanCandName)) cleanCandName = 'El candidato';
+
   const cvLower = cvText.toLowerCase();
   const supportCombined = supportTexts.join(' ').toLowerCase();
   const hasSupport = supportTexts.length > 0;
@@ -207,8 +212,9 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   }
 
   return {
+    candidatoNombre: cleanCandName,
     puntuacionIA: score,
-    resumenCualitativo: `Análisis Cualitativo para ${targetRoleName}: ${candidateName || 'El candidato'} demuestra experiencia relevante orientada a ${targetRoleName}. Se evaluaron sus competencias técnicas y su capacidad real para desempeñar este puesto.`,
+    resumenCualitativo: `Análisis Cualitativo para ${targetRoleName}: ${cleanCandName} demuestra experiencia relevante orientada a ${targetRoleName}. Se evaluaron sus competencias técnicas y su capacidad real para desempeñar este puesto.`,
     habilidadesReales: requiredKeywords.filter(k => cvLower.includes(k.toLowerCase())).concat(['Coherencia Laboral', 'Formación Comprobada']),
     verificacionEstudios: {
       estado: estadoFinal,
