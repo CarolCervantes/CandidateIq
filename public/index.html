@@ -193,7 +193,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
     <div class="field" style="margin-bottom: 14px;">
       <label for="cargo" style="font-weight: 600;">Nombre del Cargo o Puesto a Evaluar (*Requerido)</label>
       <input type="text" id="cargo" placeholder="ej. Contador Público, Ingeniero de Sistemas, Auxiliar Administrativo">
-      <div class="field-note">La Inteligencia Artificial evaluará la idoneidad y los títulos del candidato específicamente para este puesto.</div>
+      <div class="field-note">El sistema evaluará la idoneidad y los títulos del candidato específicamente para este puesto.</div>
     </div>
 
     <div class="two">
@@ -554,7 +554,7 @@ function renderRanking() {
           ${c.phone ? '📱 Teléfono: <strong>' + escapeHtml(c.phone) + '</strong>' : '📱 Teléfono no detectado'}<br>
           
           <div style="margin-top: 8px; background: var(--card); padding: 10px; border-radius: 4px; border: 1px solid var(--line);">
-            <strong>🤖 Análisis Cualitativo IA:</strong><br>
+            <strong>📋 Análisis Cualitativo del Perfil:</strong><br>
             <span style="font-size: 12px; color: var(--ink);">${escapeHtml(c.aiAnalysisText || 'Análisis profundo completado.')}</span>
           </div>
 
@@ -750,7 +750,7 @@ $('evaluar-btn').addEventListener('click', async () => {
       return;
     }
 
-    showStatus(`Ejecutando IA: Evaluando adecuación para el cargo de "${cargo || 'Vacante'}" y cotejando diplomas...`, '');
+    showStatus(`Evaluando adecuación para el cargo de "${cargo || 'Vacante'}" y cotejando diplomas...`, '');
     $('evaluar-btn').disabled = true;
 
     // Clasificar archivos entre Hojas de Vida e imágenes/documentos soporte de diplomas
@@ -759,7 +759,7 @@ $('evaluar-btn').addEventListener('click', async () => {
 
     for (let i = 0; i < state.files.length; i++) {
       const file = state.files[i];
-      showStatus(`Analizando con IA archivo ${i + 1} de ${state.files.length}: ${file.name}`, '');
+      showStatus(`Analizando archivo ${i + 1} de ${state.files.length}: ${file.name}`, '');
       const text = await readFile(file);
 
       const isSupport = /diploma|certificado|acta|titulo|título|estudio/i.test(file.name) || file.type.startsWith('image/');
@@ -781,7 +781,7 @@ $('evaluar-btn').addEventListener('click', async () => {
       const cleanName = baseCand.name.replace(/^(nombre|candidato):\s*/i, '').trim();
       baseCand.name = cleanName;
 
-      showStatus(`🌐 Transmitiendo a la nube y analizando perfil con IA de ${cleanName} (${i + 1}/${targetCVs.length})...`, '');
+      showStatus(`🌐 Transmitiendo a la nube y analizando perfil de ${cleanName} (${i + 1}/${targetCVs.length})...`, '');
 
       // Simulación de transmisión en la nube para percibir la carga del servidor
       await new Promise(r => setTimeout(r, 500));
@@ -828,14 +828,14 @@ $('evaluar-btn').addEventListener('click', async () => {
     state.selectedIds = new Set(candidates.filter(c => c.selected).map(c => c.id));
 
     $('ranking-summary').textContent =
-      `${candidates.length} candidato(s) analizado(s) profundamente con IA y verificación documental. ${Math.min(puestos, candidates.length)} marcado(s) para entrevista.`;
+      `${candidates.length} candidato(s) analizado(s) profundamente y con verificación documental. ${Math.min(puestos, candidates.length)} marcado(s) para entrevista.`;
 
     $('ranking-panel').classList.add('show');
     renderRanking();
-    showStatus('Análisis de Inteligencia Artificial y cotejo documental completado con éxito.', 'ok');
+    showStatus('Análisis cualitativo y cotejo documental completado con éxito.', 'ok');
   } catch (err) {
     console.error(err);
-    showStatus('Ocurrió un error en el análisis de IA: ' + err.message, 'warn');
+    showStatus('Ocurrió un error en el análisis: ' + err.message, 'warn');
   } finally {
     $('evaluar-btn').disabled = false;
   }
