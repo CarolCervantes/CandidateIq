@@ -172,8 +172,8 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   }
 
   // 3. Motor Inteligente de Cotejo Local (Fallback cuando no hay API Key activa)
-  let cleanCandName = String(candidateName || 'El candidato').replace(/^(t[íi]tulo|profesional|candidato)\s*[:.-]?\s*/i, '').trim();
-  if (!cleanCandName || /t[íi]tulo/i.test(cleanCandName)) cleanCandName = 'El candidato';
+  let cleanCandName = String(candidateName || 'El candidato').replace(/^(t[íi]tulo|profesional|candidato)\s*[:.-]?\s*/i, '').replace(/\b(apellido|apellidos)\b\s*[:.-]?/gi, '').trim();
+  if (!cleanCandName || /t[íi]tulo/i.test(cleanCandName) || /\bapellido\b/i.test(cleanCandName)) cleanCandName = 'El candidato';
 
   const cvLower = cvText.toLowerCase();
   const supportCombined = (supportTexts.join(' ') + ' ' + cvText).toLowerCase();

@@ -416,17 +416,31 @@ function extractCandidateDetails(text, filename) {
     title = textProfMatch[0].trim();
   }
 
-  const explicitNameMatch = text.match(/(?:nombre|candidato|postulante|graduado|hace constar que|otorgado a|confiere a)\s*[:.-]?\s*([A-ZÁÉÍÓÚÑa-zñáéíóú\s]{4,50})/i);
-  if (explicitNameMatch) {
-    const candidateStr = explicitNameMatch[1].trim();
-    if (candidateStr.length >= 4 && !badHeader.test(candidateStr) && !/t[íi]tulo/i.test(candidateStr) && !/profesional/i.test(candidateStr)) {
-      name = candidateStr;
+  // 1. Detectar plantilla de formulario "Nombre: Carol Apellido: Cervantes Acosta"
+  const formNameMatch = text.match(/nombre[s]?\s*[:.-]?\s*([A-ZÁÉÍÓÚÑa-zñáéíóú\s]+?)\s+apellido[s]?\s*[:.-]?\s*([A-ZÁÉÍÓÚÑa-zñáéíóú\s]+)/i);
+  if (formNameMatch) {
+    const rawFirst = formNameMatch[1].replace(/\b(nombre|apellido|candidato)\b/gi, '').trim();
+    const rawLast = formNameMatch[2].split(/\n|\r|documento|tipo|fecha|código|programa|identificación|c\.c\.|t\.i\./i)[0].replace(/\b(nombre|apellido|candidato)\b/gi, '').trim();
+    if (rawFirst && rawLast && rawFirst.length >= 2 && rawLast.length >= 2) {
+      name = `${rawFirst} ${rawLast}`;
     }
   }
 
+  // 2. Coincidencia explícita si no se detectó el formato de formulario
+  if (!name) {
+    const explicitNameMatch = text.match(/(?:nombre|candidato|postulante|graduado|hace constar que|otorgado a|confiere a)\s*[:.-]?\s*([A-ZÁÉÍÓÚÑa-zñáéíóú\s]{4,50})/i);
+    if (explicitNameMatch) {
+      const candidateStr = explicitNameMatch[1].replace(/\b(apellido|apellidos)\b\s*[:.-]?/gi, '').trim();
+      if (candidateStr.length >= 4 && !badHeader.test(candidateStr) && !/t[íi]tulo/i.test(candidateStr) && !/profesional/i.test(candidateStr)) {
+        name = candidateStr;
+      }
+    }
+  }
+
+  // 3. Buscar en las primeras líneas
   if (!name) {
     for (const line of lines.slice(0, 15)) {
-      const cleanLine = line.replace(/^(nombre|candidato|postulante)\s*[:.-]?\s*/i, '').replace(/^\[.*\]\s*/, '').trim();
+      const cleanLine = line.replace(/^(nombre|candidato|postulante)\s*[:.-]?\s*/i, '').replace(/^\[.*\]\s*/, '').replace(/\b(apellido|apellidos)\b\s*[:.-]?/gi, '').trim();
       if (
         cleanLine.length >= 4 && cleanLine.length <= 60 &&
         !badHeader.test(cleanLine) &&
@@ -445,9 +459,10 @@ function extractCandidateDetails(text, filename) {
     }
   }
 
-  if (!name || name.length < 3 || badHeader.test(name) || /t[íi]tulo/i.test(name) || /profesional/i.test(name)) {
+  // 4. Si aún no hay nombre válido o contiene palabras reservadas, obtener del nombre del archivo
+  if (!name || name.length < 3 || badHeader.test(name) || /t[íi]tulo/i.test(name) || /profesional/i.test(name) || /\bapellido\b/i.test(name)) {
     let cleanF = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-    cleanF = cleanF.replace(/^(diploma|certificado|acta|cv|curriculum|hoja\s+de\s+vida|soporte|candidato_\d+|doc)\s*/i, '').trim();
+    cleanF = cleanF.replace(/^(diploma|certificado|acta|cv|curriculum|hoja\s+de\s+vida|soporte|candidato[_\s]*\d*|doc)\s*/i, '').trim();
     const words = cleanF.split(/\s+/).filter(w => !/^(diploma|certificado|acta|cv|curriculum|hoja|de|vida|doc|pdf|txt|jpg|png|soporte|\d+)$/i.test(w));
     if (words.length > 0) {
       name = words.join(' ');
@@ -456,7 +471,8 @@ function extractCandidateDetails(text, filename) {
     }
   }
 
-  name = name.replace(/^(nombre|candidato|postulante)\s*[:.-]?\s*/i, '').replace(/^\[.*\]\s*/, '').replace(/[_-]+/g, ' ').trim();
+  // Limpieza final de etiquetas "apellido" o encabezados
+  name = name.replace(/\b(nombre|candidato|postulante|apellido|apellidos)\b\s*[:.-]?/gi, '').replace(/^\[.*\]\s*/, '').replace(/[_-]+/g, ' ').trim();
   name = name.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
   if (!title) {
