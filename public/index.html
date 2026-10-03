@@ -745,14 +745,20 @@ $('evaluar-btn').addEventListener('click', async () => {
       const cvItem = targetCVs[i];
       const baseCand = evaluateCandidate(cvItem.text, cvItem.file.name, cvItem.index, required, excluded);
       
-      showStatus(`Evaluando adecuación al cargo e inspeccionando diplomas para ${baseCand.name}...`, '');
+      const cleanName = baseCand.name.replace(/^(nombre|candidato):\s*/i, '').trim();
+      baseCand.name = cleanName;
+
+      showStatus(`🌐 Transmitiendo a la nube y analizando perfil con IA de ${cleanName} (${i + 1}/${targetCVs.length})...`, '');
+
+      // Simulación de transmisión en la nube para percibir la carga del servidor
+      await new Promise(r => setTimeout(r, 500));
 
       try {
         const analyzeRes = await fetch('/api/analyze-candidate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            candidateName: baseCand.name,
+            candidateName: cleanName,
             jobTitle: cargo,
             cvText: cvItem.text,
             supportTexts: supportTexts,
