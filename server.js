@@ -105,12 +105,12 @@ ${supportTexts.length > 0 ? supportTexts.join('\n---\n').slice(0, 4000) : 'NO SE
 """
 
 REGLAS DE EVALUACIÓN Y VERIFICACIÓN CRUZADA:
-1. ALINEACIÓN DEL CARGO Y TITULACIÓN: Evalúa si la Hoja de Vida del candidato está ALINEADA CUALITATIVA Y TÉCNICAMENTE con el puesto de "${jobTitle || 'Vacante General'}".
-   - Compara el área profesional de la vacante (${jobTitle || 'Vacante'}) contra los títulos, estudios y experiencia demostrada en la Hoja de Vida.
-   - Si la profesión, formación o experiencia del candidato pertenece a un área o sector completamente diferente sin relación con la vacante (ej. Chef postulando a Sistemas, Abogado postulando a Contador, Médico postulando a Diseñador), penaliza fuertemente su puntuación (asignando de 1 a 3/10) y marca estado "Descartado".
-   - Un candidato con un perfil profesional no alineado con la vacante NUNCA debe quedar en los primeros lugares del ranking.
-2. COTEJO DE DIPLOMAS: Compara los estudios superiores o títulos declarados en la Hoja de Vida contra el texto de los Diplomas/Certificados adjuntos.
-   - Si los diplomas respaldan exactamente los títulos afirmados (coinciden título e institución), asigna estado "Verificado".
+1. ALINEACIÓN DEL CARGO, ESTUDIOS Y DIPLOMAS: Evalúa si la Hoja de Vida Y los Diplomas/Certificados/Cursos adjuntos respaldan la idoneidad técnica para el puesto de "${jobTitle || 'Vacante General'}".
+   - Compara la vacante solicitada (${jobTitle || 'Vacante'}) contra los títulos principales, especializaciones, diplomados, certificaciones, cursos y experiencia demostrada en el CV y soportes adjuntos.
+   - Si un candidato tiene un origen profesional distinto (ej. Chef, Abogado) PERO presenta diplomados, cursos, especializaciones o certificados en el área de la vacante (${jobTitle}), NO lo descartes por completo: reconoce y valora de forma justa sus estudios y certificaciones específicos en el área de la vacante.
+   - Marca estado "Descartado" (con puntuación de 1 a 3/10) ÚNICAMENTE a aquellos candidatos cuyo perfil completo (CV y diplomas/certificados adjuntos) carezca totalmente de relación, estudios o certificaciones aplicables al puesto de ${jobTitle}.
+2. COTEJO DE DIPLOMAS Y ESTUDIOS: Compara los estudios superiores, especializaciones, diplomados o cursos declarados en la Hoja de Vida contra el texto de los Diplomas/Certificados adjuntos.
+   - Si los diplomas/certificados respaldan los títulos o cursos afirmados (coinciden título e institución), asigna estado "Verificado".
    - Si afirma estudios pero faltan diplomas de respaldo, asigna estado "Parcial".
    - Si detectas discrepancias (nombres distintos, títulos contradictorios), asigna "Inconsistencia" y detalla la alerta.
 
@@ -119,12 +119,12 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   "candidatoNombre": "Nombre Completo del Candidato",
   "candidatoTitulo": "Título Profesional o Profesión",
   "puntuacionIA": 9,
-  "resumenCualitativo": "Explicación detallada de la alineación del perfil con el cargo de ${jobTitle || 'Vacante'}...",
+  "resumenCualitativo": "Explicación detallada de la alineación del perfil y estudios con el cargo de ${jobTitle || 'Vacante'}...",
   "habilidadesReales": ["Habilidad 1", "Habilidad 2", "Habilidad 3"],
   "verificacionEstudios": {
     "estado": "Verificado" | "Parcial" | "Inconsistencia",
-    "detalles": "Explicación del cotejo entre la Hoja de Vida y los diplomas adjuntos...",
-    "titulosComprobados": ["Título - Institución"]
+    "detalles": "Explicación del cotejo entre la Hoja de Vida y los diplomas/certificados/cursos adjuntos...",
+    "titulosComprobados": ["Título / Certificado - Institución"]
   },
   "alertasIncoherencia": []
 }`;
@@ -184,7 +184,7 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   const hasAcademicDoc = /diploma|certificado|acta|hace constar|otorgado|unicolombo|universidad|t[íi]tulo|registro de grado|folio|snies/i.test(supportCombined);
   const hasSupport = supportTexts.length > 0 || hasAcademicDoc;
 
-  // Motor Universal de Alineación de Dominio Profesional
+  // Motor Universal de Alineación de Dominio Profesional y Validación de Estudios
   const domainMap = [
     { name: 'Tecnología y Software', regex: /sistemas|software|programad|desarrollad|tecnolog|inform[aá]tic|backend|frontend|devops|data|it\b/i },
     { name: 'Contaduría y Finanzas', regex: /contador|contabilid|niif|tributar|auditor|revis|finanz/i },
@@ -196,13 +196,19 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
 
   const targetDomain = domainMap.find(d => d.regex.test(targetLower));
   const candidateDomain = domainMap.find(d => d.regex.test(cvLower));
+  const candidateHasTargetStudies = targetDomain ? targetDomain.regex.test(supportCombined) : false;
 
   let isRoleIncompatible = false;
+  let hasCrossDomainStudies = false;
   let incompatibilityMsg = '';
 
   if (targetDomain && candidateDomain && targetDomain.name !== candidateDomain.name) {
-    isRoleIncompatible = true;
-    incompatibilityMsg = `Desalineación de Perfil: La vacante requiere competencias en ${targetDomain.name} (${jobTitle}), mientras que el candidato pertenece a ${candidateDomain.name}.`;
+    if (candidateHasTargetStudies) {
+      hasCrossDomainStudies = true;
+    } else {
+      isRoleIncompatible = true;
+      incompatibilityMsg = `Desalineación de Perfil: La vacante requiere competencias en ${targetDomain.name} (${jobTitle}), y el candidato pertenece a ${candidateDomain.name} sin acreditar estudios ni certificaciones en el área requerida.`;
+    }
   }
 
   let isVerified = false;
@@ -213,7 +219,7 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
     alertList.push(incompatibilityMsg);
   }
 
-  const titleMatches = cvText.match(/(?:contador[a]?\s+p[uú]blic[oa]|ingenier[oa]|administrador[a]|tecn[oó]log[oa]|bachiller|diplomado|licenciad[oa])/gi) || [];
+  const titleMatches = cvText.match(/(?:contador[a]?\s+p[uú]blic[oa]|ingenier[oa]|administrador[a]|tecn[oó]log[oa]|bachiller|diplomado|licenciad[oa]|curso|certificad[oa])/gi) || [];
   const uniqueTitles = [...new Set(titleMatches.map(t => t.trim()))];
 
   if (hasSupport) {
@@ -233,7 +239,9 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   
   let score = Math.min(10, Math.max(3, Math.round((matchesCount / (requiredKeywords.length || 1)) * 6) + 4));
   if (isRoleIncompatible) {
-    score = 1; // Penalización máxima por desalineación de área profesional
+    score = 1; // Penalización máxima por desalineación de área profesional sin estudios en el área
+  } else if (hasCrossDomainStudies) {
+    score = Math.max(score, 7); // Bonificación por contar con diplomado/curso/certificación en el área de la vacante
   }
 
   let estadoFinal = 'Parcial';
@@ -241,20 +249,27 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
 
   if (hasSupport && isVerified) {
     estadoFinal = 'Verificado';
-    detallesEstado = `Documentación comprobada: El diploma/certificado adjunto valida los estudios de ${verifiedTitles.join(', ')} afirmados en la Hoja de Vida.`;
+    detallesEstado = `Documentación comprobada: El diploma/certificado adjunto valida los estudios y certificaciones (${verifiedTitles.join(', ')}) en la Hoja de Vida.`;
   } else if (hasSupport && !isVerified) {
     estadoFinal = 'Inconsistencia';
     detallesEstado = 'Alerta de cotejo: El diploma adjunto fue analizado pero el título/contenido no coincide con los estudios declarados en la Hoja de Vida.';
     alertList.push('Discrepancia entre la titulación afirmada en el CV y el certificado o diploma adjunto.');
   }
 
+  let resumenFinal = `Análisis Cualitativo para ${targetRoleName}: ${cleanCandName} demuestra experiencia relevante alineada con ${targetRoleName}. Se evaluaron sus competencias técnicas e idoneidad para desempeñar este puesto.`;
+  if (isRoleIncompatible) {
+    resumenFinal = `ALERTA DE DESALINEACIÓN PROFESIONAL para ${targetRoleName}: ${cleanCandName} cuenta con formación/experiencia en ${candidateDomain ? candidateDomain.name : 'otro sector'}. Su perfil no guarda relación ni acredita estudios aplicables a la vacante requerida de ${targetRoleName}.`;
+  } else if (hasCrossDomainStudies) {
+    resumenFinal = `FORMACIÓN COMPLEMENTARIA VERIFICADA para ${targetRoleName}: ${cleanCandName} posee perfil base en ${candidateDomain ? candidateDomain.name : 'otro campo'}, pero cuenta con diplomados, certificados o estudios acreditados en el área de ${targetRoleName}, demostrando idoneidad adaptativa.`;
+  }
+
   return {
     candidatoNombre: cleanCandName,
     puntuacionIA: score,
-    resumenCualitativo: isRoleIncompatible
-      ? `ALERTA DE DESALINEACIÓN PROFESIONAL para ${targetRoleName}: ${cleanCandName} cuenta con formación/experiencia en ${candidateDomain ? candidateDomain.name : 'otro sector'}. Su perfil no guarda relación con la vacante requerida de ${targetRoleName}.`
-      : `Análisis Cualitativo para ${targetRoleName}: ${cleanCandName} demuestra experiencia relevante alineada con ${targetRoleName}. Se evaluaron sus competencias técnicas y su idoneidad para desempeñar este puesto.`,
-    habilidadesReales: isRoleIncompatible ? [candidateDomain ? candidateDomain.name : 'Área Diferente'] : requiredKeywords.filter(k => cvLower.includes(k.toLowerCase())).concat(['Coherencia Laboral', 'Formación Comprobada']),
+    resumenCualitativo: resumenFinal,
+    habilidadesReales: isRoleIncompatible 
+      ? [candidateDomain ? candidateDomain.name : 'Área Diferente'] 
+      : requiredKeywords.filter(k => cvLower.includes(k.toLowerCase())).concat(['Formación Comprobada', hasCrossDomainStudies ? 'Estudios Complementarios en Vacante' : 'Coherencia Laboral']),
     verificacionEstudios: {
       estado: estadoFinal,
       detalles: detallesEstado,
