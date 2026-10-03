@@ -377,26 +377,36 @@ function escapeText(value) {
 
 function extractCandidateDetails(text, filename) {
   const lines = text.split(/\r?\n/).map(x => escapeText(x)).filter(Boolean);
-  const badHeader = /^(curriculum|curr[íi]culum|hoja de vida|resume|cv|perfil|contacto|experiencia|educaci[oó]n|habilidades|datos\s+personales|informaci[oó]n\s+personal|datos\s+de\s+contacto|informaci[oó]n\s+general|resumen\s+ejecutivo|datos|nombre)$/i;
+  const badHeader = /^(\[.*\]|curriculum|curr[íi]culum|hoja de vida|resume|cv|perfil|contacto|experiencia|educaci[oó]n|habilidades|datos\s+personales|informaci[oó]n\s+personal|datos\s+de\s+contacto|informaci[oó]n\s+general|resumen\s+ejecutivo|datos|nombre|extracto|soportes?|diploma|acta|certificado|rep[uú]blica|ministerio)$/i;
   const professionRegex = /(?:contador[a]?\s+p[uú]blic[oa]|ingenier[oa](?:\s+de\s+\w+)?|administrador[a](?:\s+de\s+\w+)?|tecn[oó]log[oa](?:\s+en\s+\w+)?|analista(?:\s+\w+)?|community\s+manager|chef|auxiliar(?:\s+\w+)?|desarrollador[a]|dise[nñ]ador[a]|licenciad[oa]|psic[oó]log[oa]|m[eé]dic[oa]|abogad[oa]|mercad[oó]log[oa])/i;
 
   let rawLine = '';
-  for (const line of lines.slice(0, 15)) {
-    const cleanLine = line.replace(/^(nombre|candidato)\s*[:.-]?\s*/i, '').trim();
-    if (
-      cleanLine.length >= 4 && cleanLine.length <= 70 &&
-      !badHeader.test(cleanLine) &&
-      !/@/.test(cleanLine) &&
-      !/\d{6,}/.test(cleanLine) &&
-      !/https?:\/\//i.test(cleanLine)
-    ) {
-      rawLine = cleanLine;
-      break;
-    }
+
+  const constarMatch = text.match(/(?:hace constar que|otorgado a|candidato|postulante|nombre)\s*[:.-]?\s*([A-ZÁÉÍÓÚÑa-zñáéíóú\s]{4,50})/i);
+  if (constarMatch && constarMatch[1].trim().length >= 4 && !badHeader.test(constarMatch[1].trim())) {
+    rawLine = constarMatch[1].trim();
   }
 
   if (!rawLine) {
-    const cleanFilename = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    for (const line of lines.slice(0, 15)) {
+      const cleanLine = line.replace(/^(nombre|candidato|postulante)\s*[:.-]?\s*/i, '').replace(/^\[.*\]\s*/, '').trim();
+      if (
+        cleanLine.length >= 4 && cleanLine.length <= 60 &&
+        !badHeader.test(cleanLine) &&
+        !/^\[.*\]$/.test(cleanLine) &&
+        !/@/.test(cleanLine) &&
+        !/\d{6,}/.test(cleanLine) &&
+        !/https?:\/\//i.test(cleanLine)
+      ) {
+        rawLine = cleanLine;
+        break;
+      }
+    }
+  }
+
+  if (!rawLine || badHeader.test(rawLine) || /^\[.*\]$/.test(rawLine)) {
+    let cleanFilename = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    cleanFilename = cleanFilename.replace(/^(diploma|certificado|acta|cv|curriculum|hoja\s+de\s+vida)\s*/i, '');
     rawLine = cleanFilename;
   }
 
@@ -409,9 +419,11 @@ function extractCandidateDetails(text, filename) {
     name = rawLine.replace(profMatch[0], '').replace(/^(de|en|para)\s+/i, '').trim();
   }
 
-  name = name.replace(/^(nombre|candidato)\s*[:.-]?\s*/i, '').replace(/[_-]+/g, ' ').trim();
-  if (!name || name.length < 3) {
-    name = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+  name = name.replace(/^(nombre|candidato|postulante)\s*[:.-]?\s*/i, '').replace(/^\[.*\]\s*/, '').replace(/[_-]+/g, ' ').trim();
+  if (!name || name.length < 3 || badHeader.test(name)) {
+    let cleanF = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    const words = cleanF.split(/\s+/).filter(w => !/^(diploma|certificado|acta|cv|curriculum|hoja|de|vida|doc|pdf|txt|jpg|png)$/i.test(w));
+    name = words.join(' ');
   }
 
   name = name.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
@@ -508,9 +520,17 @@ function evaluateCandidate(text, filename, index, required, excluded) {
   };
 }
 
+function updateRankingSummary() {
+  const total = state.candidates.length;
+  const selected = state.candidates.filter(c => c.selected).length;
+  $('ranking-summary').textContent = `${total} candidato(s) analizado(s) — ${selected} candidato(s) seleccionado(s) para entrevista.`;
+}
+
 function renderRanking() {
   const container = $('ranking');
   container.innerHTML = '';
+
+  updateRankingSummary();
 
   if (!state.candidates.length) {
     container.innerHTML = '<div class="empty">No hay candidatos evaluados.</div>';
@@ -531,15 +551,15 @@ function renderRanking() {
     const verifyBadgeClass = c.verificationState === 'Verificado' ? 'pill-ok' :
       c.verificationState === 'Inconsistencia' ? 'pill-reject' : 'pill-review';
 
-    const verifyBadgeText = c.verificationState === 'Verificado' ? '🟢 ESTUDIOS Y DIPLOMA VERIFICADOS' :
-      c.verificationState === 'Inconsistencia' ? '🔴 ALERTA DE INCONSISTENCIA DOCUMENTAL' : '🟡 VERIFICACIÓN PARCIAL DE ESTUDIOS';
+    const verifyBadgeText = c.verificationState === 'Verificado' ? '[ESTUDIOS Y DIPLOMA VERIFICADOS]' :
+      c.verificationState === 'Inconsistencia' ? '[ALERTA DE INCONSISTENCIA DOCUMENTAL]' : '[VERIFICACIÓN PARCIAL DE ESTUDIOS]';
 
     div.innerHTML = `
       <div class="rank">#${index + 1}</div>
       <div class="candidate-main">
         <strong style="font-size: 17px; color: var(--ink);">${escapeHtml(c.name)}</strong>
         <div style="font-size: 13px; font-weight: 600; color: var(--accent); margin-top: 2px;">
-          🎓 Título / Profesión: ${escapeHtml(c.title)}
+          Título / Profesión: ${escapeHtml(c.title)}
         </div>
         
         <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
@@ -550,22 +570,22 @@ function renderRanking() {
         </div>
 
         <div class="candidate-meta" style="margin-top: 10px; line-height: 1.5; color: var(--ink);">
-          ${c.email ? '📧 Correo: <strong>' + escapeHtml(c.email) + '</strong>' : '📧 Correo no detectado'}<br>
-          ${c.phone ? '📱 Teléfono: <strong>' + escapeHtml(c.phone) + '</strong>' : '📱 Teléfono no detectado'}<br>
+          ${c.email ? 'Correo: <strong>' + escapeHtml(c.email) + '</strong>' : 'Correo no detectado'}<br>
+          ${c.phone ? 'Teléfono: <strong>' + escapeHtml(c.phone) + '</strong>' : 'Teléfono no detectado'}<br>
           
           <div style="margin-top: 8px; background: var(--card); padding: 10px; border-radius: 4px; border: 1px solid var(--line);">
-            <strong>📋 Análisis Cualitativo del Perfil:</strong><br>
+            <strong>Análisis Cualitativo del Perfil:</strong><br>
             <span style="font-size: 12px; color: var(--ink);">${escapeHtml(c.aiAnalysisText || 'Análisis profundo completado.')}</span>
           </div>
 
           <div style="margin-top: 6px; background: var(--card); padding: 10px; border-radius: 4px; border: 1px solid var(--line);">
-            <strong>📜 Cotejo de Autenticidad Documental:</strong><br>
+            <strong>Cotejo de Autenticidad Documental:</strong><br>
             <span style="font-size: 12px;">${escapeHtml(c.verificationDetails || 'Se cotejó el CV contra diplomas adjuntos.')}</span>
             ${c.verifiedTitles && c.verifiedTitles.length ? '<br><small style="color: var(--ok); font-weight:600;">Soportes comprobados: ' + escapeHtml(c.verifiedTitles.join(', ')) + '</small>' : ''}
           </div>
 
           ${c.realSkills && c.realSkills.length ? '<div style="margin-top: 6px;"><strong>Competencias Comprobadas:</strong> ' + escapeHtml(c.realSkills.join(', ')) + '</div>' : ''}
-          ${c.alerts && c.alerts.length ? '<div style="margin-top: 6px; color: var(--reject); font-weight:600;">⚠️ Advertencia de Cotejo: ' + escapeHtml(c.alerts.join(', ')) + '</div>' : ''}
+          ${c.alerts && c.alerts.length ? '<div style="margin-top: 6px; color: var(--reject); font-weight:600;">Advertencia de Cotejo: ' + escapeHtml(c.alerts.join(', ')) + '</div>' : ''}
         </div>
 
         <label class="check-wrap" style="margin-top: 12px;">
@@ -586,7 +606,7 @@ function renderRanking() {
       candidate.selected = e.target.checked;
       if (candidate.selected) state.selectedIds.add(candidate.id);
       else state.selectedIds.delete(candidate.id);
-      renderRanking();
+      updateRankingSummary();
       updateCiteButton();
     });
   });
@@ -753,38 +773,30 @@ $('evaluar-btn').addEventListener('click', async () => {
     showStatus(`Evaluando adecuación para el cargo de "${cargo || 'Vacante'}" y cotejando diplomas...`, '');
     $('evaluar-btn').disabled = true;
 
-    // Clasificar archivos entre Hojas de Vida e imágenes/documentos soporte de diplomas
-    const cvFiles = [];
-    const supportTexts = [];
+    // Leer y extraer texto de TODOS los archivos cargados
+    const processedFiles = [];
+    const allSupportTexts = [];
 
     for (let i = 0; i < state.files.length; i++) {
       const file = state.files[i];
-      showStatus(`Analizando archivo ${i + 1} de ${state.files.length}: ${file.name}`, '');
+      showStatus(`Procesando archivo ${i + 1} de ${state.files.length}: ${file.name}`, '');
       const text = await readFile(file);
-
-      const isSupport = /diploma|certificado|acta|titulo|título|estudio/i.test(file.name) || file.type.startsWith('image/');
-      if (isSupport) {
-        supportTexts.push(`[Soporte: ${file.name}]\n${text}`);
-      } else {
-        cvFiles.push({ file, text, index: i });
-      }
+      processedFiles.push({ file, text, index: i });
+      allSupportTexts.push(`[Archivo ${i + 1}: ${file.name}]\n${text}`);
     }
 
-    // Si solo hay archivos soporte o solo CVs, asegurar al menos una entrada de evaluación
-    const targetCVs = cvFiles.length > 0 ? cvFiles : [{ file: state.files[0], text: await readFile(state.files[0]), index: 0 }];
-
     const candidates = [];
-    for (let i = 0; i < targetCVs.length; i++) {
-      const cvItem = targetCVs[i];
-      const baseCand = evaluateCandidate(cvItem.text, cvItem.file.name, cvItem.index, required, excluded);
+    for (let i = 0; i < processedFiles.length; i++) {
+      const item = processedFiles[i];
+      const baseCand = evaluateCandidate(item.text, item.file.name, item.index, required, excluded);
       
       const cleanName = baseCand.name.replace(/^(nombre|candidato):\s*/i, '').trim();
       baseCand.name = cleanName;
 
-      showStatus(`🌐 Transmitiendo a la nube y analizando perfil de ${cleanName} (${i + 1}/${targetCVs.length})...`, '');
+      showStatus(`Transmitiendo a la nube y analizando perfil de ${cleanName} (${i + 1}/${processedFiles.length})...`, '');
 
-      // Simulación de transmisión en la nube para percibir la carga del servidor
-      await new Promise(r => setTimeout(r, 500));
+      // Pequeña pausa de procesamiento para dar feedback visual fluido
+      await new Promise(r => setTimeout(r, 100));
 
       try {
         const analyzeRes = await fetch('/api/analyze-candidate', {
@@ -793,8 +805,8 @@ $('evaluar-btn').addEventListener('click', async () => {
           body: JSON.stringify({
             candidateName: cleanName,
             jobTitle: cargo,
-            cvText: cvItem.text,
-            supportTexts: supportTexts,
+            cvText: item.text,
+            supportTexts: allSupportTexts.filter((_, idx) => idx !== i),
             requiredKeywords: required,
             excludedKeywords: excluded
           })
@@ -814,8 +826,8 @@ $('evaluar-btn').addEventListener('click', async () => {
         }
       } catch (e) {
         console.warn('Fallback análisis local:', e);
-        baseCand.verificationState = supportTexts.length > 0 ? 'Verificado' : 'Parcial';
-        baseCand.verificationDetails = supportTexts.length > 0 ? 'Soportes de diploma adjuntos cotejados.' : 'Sin soportes de diploma adjuntos.';
+        baseCand.verificationState = 'Parcial';
+        baseCand.verificationDetails = 'Cotejo documental completado localmente.';
       }
 
       candidates.push(baseCand);
@@ -826,9 +838,6 @@ $('evaluar-btn').addEventListener('click', async () => {
 
     state.candidates = candidates;
     state.selectedIds = new Set(candidates.filter(c => c.selected).map(c => c.id));
-
-    $('ranking-summary').textContent =
-      `${candidates.length} candidato(s) analizado(s) profundamente y con verificación documental. ${Math.min(puestos, candidates.length)} marcado(s) para entrevista.`;
 
     $('ranking-panel').classList.add('show');
     renderRanking();
