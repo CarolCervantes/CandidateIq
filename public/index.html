@@ -190,6 +190,12 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
 
   <section class="section">
     <h2>1. Configurar vacante</h2>
+    <div class="field" style="margin-bottom: 14px;">
+      <label for="cargo" style="font-weight: 600;">Nombre del Cargo o Puesto a Evaluar (*Requerido)</label>
+      <input type="text" id="cargo" placeholder="ej. Contador Público, Ingeniero de Sistemas, Auxiliar Administrativo">
+      <div class="field-note">La Inteligencia Artificial evaluará la idoneidad y los títulos del candidato específicamente para este puesto.</div>
+    </div>
+
     <div class="two">
       <div class="field">
         <label for="puestos">Cantidad de puestos disponibles</label>
@@ -198,7 +204,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
       </div>
       <div class="field">
         <label for="requeridas">Palabras clave requeridas</label>
-        <input type="text" id="requeridas" placeholder="Excel, inglés, Java, 2 años de experiencia">
+        <input type="text" id="requeridas" placeholder="Excel, NIIF, Java, 2 años de experiencia">
         <div class="field-note">Separadas por coma. Cuantas más aparezcan, mayor puntuación.</div>
       </div>
     </div>
@@ -371,11 +377,11 @@ function escapeText(value) {
 
 function extractName(text, filename) {
   const lines = text.split(/\r?\n/).map(x => escapeText(x)).filter(Boolean);
-  const bad = /^(curriculum|curr[íi]culum|hoja de vida|resume|cv|perfil|contacto|experiencia|educaci[oó]n|habilidades)$/i;
+  const bad = /^(curriculum|curr[íi]culum|hoja de vida|resume|cv|perfil|contacto|experiencia|educaci[oó]n|habilidades|datos\s+personales|informaci[oó]n\s+personal|datos\s+de\s+contacto|informaci[oó]n\s+general|resumen\s+ejecutivo|datos)$/i;
 
-  for (const line of lines.slice(0, 12)) {
+  for (const line of lines.slice(0, 15)) {
     if (
-      line.length >= 5 && line.length <= 70 &&
+      line.length >= 4 && line.length <= 70 &&
       !bad.test(line) &&
       !/@/.test(line) &&
       !/\d{6,}/.test(line) &&
@@ -385,7 +391,10 @@ function extractName(text, filename) {
       if (words.length >= 2 && words.length <= 6) return line;
     }
   }
-  return filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || 'Candidato';
+
+  const cleanFilename = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+  const fileWords = cleanFilename.split(/\s+/).filter(w => !/^(cv|curriculum|hoja|de|vida|doc|pdf|txt|diploma|certificado)$/i.test(w));
+  return fileWords.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ') || 'Candidato';
 }
 
 function extractEmail(text) {
@@ -693,16 +702,22 @@ function getSelectedCandidates() {
 
 $('evaluar-btn').addEventListener('click', async () => {
   try {
+    const cargo = $('cargo').value.trim();
     const required = parseKeywords($('requeridas').value);
     const excluded = parseKeywords($('excluyentes').value);
     const puestos = Math.max(1, parseInt($('puestos').value, 10) || 1);
+
+    if (!cargo && !required.length) {
+      showStatus('Por favor especifica el Nombre del Cargo a Evaluar (ej. Contador Público, Ingeniero de Sistemas) o las Palabras Clave Requeridas.', 'warn');
+      return;
+    }
 
     if (!state.files.length) {
       showStatus('Primero carga uno o varios currículums.', 'warn');
       return;
     }
 
-    showStatus('Ejecutando Inteligencia Artificial: Lectura profunda de CVs y cotejo cruzado con diplomas...', '');
+    showStatus(`Ejecutando IA: Evaluando adecuación para el cargo de "${cargo || 'Vacante'}" y cotejando diplomas...`, '');
     $('evaluar-btn').disabled = true;
 
     // Clasificar archivos entre Hojas de Vida e imágenes/documentos soporte de diplomas
@@ -730,7 +745,7 @@ $('evaluar-btn').addEventListener('click', async () => {
       const cvItem = targetCVs[i];
       const baseCand = evaluateCandidate(cvItem.text, cvItem.file.name, cvItem.index, required, excluded);
       
-      showStatus(`Verificando autenticidad documental para ${baseCand.name}...`, '');
+      showStatus(`Evaluando adecuación al cargo e inspeccionando diplomas para ${baseCand.name}...`, '');
 
       try {
         const analyzeRes = await fetch('/api/analyze-candidate', {
@@ -738,6 +753,7 @@ $('evaluar-btn').addEventListener('click', async () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             candidateName: baseCand.name,
+            jobTitle: cargo,
             cvText: cvItem.text,
             supportTexts: supportTexts,
             requiredKeywords: required,

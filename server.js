@@ -79,17 +79,20 @@ Nota: Configura MISTRAL_API_KEY o GEMINI_API_KEY en Render para lectura de visi�
 // -------------------------------------------------------------
 // HELPER: ANÁLISIS CUALITATIVO PROFUNDO Y VERIFICACIÓN DE DIPLOMAS CON IA
 // -------------------------------------------------------------
-async function analyzeCandidateWithAI({ candidateName, cvText, supportTexts = [], requiredKeywords = [], excludedKeywords = [] }) {
+async function analyzeCandidateWithAI({ candidateName, jobTitle, cvText, supportTexts = [], requiredKeywords = [], excludedKeywords = [] }) {
   const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   const mistralKey = process.env.MISTRAL_API_KEY;
 
   const prompt = `Eres un Auditor y Reclutador experto en Selección de Personal e Inspección de Documentación Académica.
-Tu objetivo es analizar profundamente la Hoja de Vida de un candidato y COTEJARLA CRUZADAMENTE con las fotos/escaneos de sus Diplomas o Certificados adjuntos para verificar la autenticidad de sus afirmaciones.
+Tu objetivo es analizar profundamente la Hoja de Vida de un candidato para evaluar su idoneidad ESPECÍFICA para el puesto de "${jobTitle || 'Vacante General'}" y COTEJARLA CRUZADAMENTE con las fotos/escaneos de sus Diplomas o Certificados adjuntos.
+
+VACANTE Y CARGO A EVALUAR:
+- Nombre del Cargo: ${jobTitle || 'No especificado'}
+- Criterios / Palabras clave Requeridas: ${requiredKeywords.join(', ') || 'General'}
+- Criterios Excluyentes: ${excludedKeywords.join(', ') || 'Ninguno'}
 
 INFORMACIÓN DEL CANDIDATO:
 - Nombre estimado: ${candidateName || 'Desconocido'}
-- Criterios de Selección Requeridos: ${requiredKeywords.join(', ') || 'General'}
-- Criterios Excluyentes: ${excludedKeywords.join(', ') || 'Ninguno'}
 
 CONTENIDO DE LA HOJA DE VIDA:
 """
@@ -102,7 +105,7 @@ ${supportTexts.length > 0 ? supportTexts.join('\n---\n').slice(0, 4000) : 'NO SE
 """
 
 REGLAS DE EVALUACIÓN Y VERIFICACIÓN CRUZADA:
-1. No te limites a contar palabras. Analiza la COHERENCIA REAL de la experiencia laboral, responsabilidades y competencias demostradas.
+1. Evalúa la idoneidad y competencias del candidato ESPECÍFICAMENTE para el cargo de "${jobTitle || 'Vacante General'}". No te limites a contar palabras. Analiza la COHERENCIA REAL de su experiencia laboral, responsabilidades y capacidad técnica.
 2. COTEJO DE DIPLOMAS: Compara los estudios superiores o títulos declarados en la Hoja de Vida contra el texto de los Diplomas/Certificados adjuntos.
    - Si los diplomas respaldan exactamente los títulos afirmados (coinciden título e institución), asigna estado "Verificado".
    - Si afirma estudios pero faltan diplomas de respaldo, asigna estado "Parcial".
@@ -111,7 +114,7 @@ REGLAS DE EVALUACIÓN Y VERIFICACIÓN CRUZADA:
 Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin bloques markdown de código extras):
 {
   "puntuacionIA": 9,
-  "resumenCualitativo": "Explicación detallada de la idoneidad y competencias reales del candidato...",
+  "resumenCualitativo": "Explicación detallada de la idoneidad y competencias reales del candidato para el cargo de ${jobTitle || 'Vacante'}...",
   "habilidadesReales": ["Habilidad 1", "Habilidad 2", "Habilidad 3"],
   "verificacionEstudios": {
     "estado": "Verificado" | "Parcial" | "Inconsistencia",
@@ -188,6 +191,7 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
   }
 
   const matchesCount = requiredKeywords.filter(k => cvLower.includes(k.toLowerCase())).length;
+  const targetRoleName = jobTitle || requiredKeywords.join(', ') || 'el cargo seleccionado';
   const score = Math.min(10, Math.max(3, Math.round((matchesCount / (requiredKeywords.length || 1)) * 6) + 4));
 
   let estadoFinal = 'Parcial';
@@ -204,7 +208,7 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
 
   return {
     puntuacionIA: score,
-    resumenCualitativo: `Análisis Cualitativo del Perfil: ${candidateName || 'El candidato'} demuestra coherencia laboral con experiencia enfocada en ${requiredKeywords.join(', ') || 'su área profesional'}. Se evaluaron sus competencias y su capacidad técnica real.`,
+    resumenCualitativo: `Análisis Cualitativo para ${targetRoleName}: ${candidateName || 'El candidato'} demuestra experiencia relevante orientada a ${targetRoleName}. Se evaluaron sus competencias técnicas y su capacidad real para desempeñar este puesto.`,
     habilidadesReales: requiredKeywords.filter(k => cvLower.includes(k.toLowerCase())).concat(['Coherencia Laboral', 'Formación Comprobada']),
     verificacionEstudios: {
       estado: estadoFinal,
@@ -220,7 +224,7 @@ Responde ÚNICAMENTE con un formato JSON estructurado válido como este (sin blo
 // -------------------------------------------------------------
 app.post('/api/analyze-candidate', async (req, res) => {
   try {
-    const { candidateName, cvText, supportTexts, requiredKeywords, excludedKeywords } = req.body;
+    const { candidateName, jobTitle, cvText, supportTexts, requiredKeywords, excludedKeywords } = req.body;
 
     if (!cvText) {
       return res.status(400).json({ ok: false, error: 'Se requiere el texto de la Hoja de Vida (cvText).' });
@@ -228,6 +232,7 @@ app.post('/api/analyze-candidate', async (req, res) => {
 
     const aiAnalysis = await analyzeCandidateWithAI({
       candidateName,
+      jobTitle,
       cvText,
       supportTexts: supportTexts || [],
       requiredKeywords: requiredKeywords || [],
